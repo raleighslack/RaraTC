@@ -15,14 +15,22 @@
 
 #define LTC_OUTPUT_PIN      4
 #define LTC_FRAMERATE       24
+#define LTC_BITS_PER_FRAME  80
 
 static const char *TAG = "main";
 
-void print_binary(uint8_t bits[10]) {
+const float period_ms = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*1000;
+
+void print_binary(uint8_t* bits[10]) {
     for (int i = 0; i < 10; i++) {
-        for (int j = 0; j < 7; j++) {
-            printf("%d", (bits[i] >> j) & 1);
+        if (bits[i] == NULL) {
+            printf("NULL ");
+            continue;
         }
+        for (int j = 7; j >= 0; j--) {
+            printf("%d", (*bits[i] >> j) & 1);
+        }
+        printf(" ");
     }
     printf("\n");
 }
@@ -31,7 +39,7 @@ void app_main(void)
 {
     
     ltc_frame testframe = {};
-    create_frame_from_timecode(&testframe, 22, 16, 29, 05);
+    create_frame_from_timecode(&testframe, 21, 16, 29, 05);
 
     two_digits twodigis = {};
     convert_digits_to_single(&twodigis, testframe.frame);
@@ -40,11 +48,6 @@ void app_main(void)
     uint8_t *test[10] = {};
     create_bits_from_frame(test, testframe);
 
-    while (true) {
-        struct timeval tv_now;
-        gettimeofday(&tv_now, NULL);
-        int64_t time_us = (int64_t)tv_now.tv_sec * 1000000L + (int64_t)tv_now.tv_usec;
-        ESP_LOGI(TAG, "Time %llu", time_us);
-        vTaskDelay(pdMS_TO_TICKS(100));
-    }
+    ESP_LOGI(TAG, "%.6f", period_ms);
+    print_binary(test);
 }

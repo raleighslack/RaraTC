@@ -30,6 +30,8 @@ typedef struct {
     uint8_t msb;
 } two_digits;
 
+uint8_t reverse_bits(uint8_t n);
+
 void convert_digits_to_single(two_digits* digits, uint8_t value);
 
 void create_frame_from_timecode(ltc_frame* frame, uint8_t frames, uint8_t seconds, uint8_t minutes, uint8_t hours);
