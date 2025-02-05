@@ -13,3 +13,5 @@ _deps
 /build
 build/RaraTC.elf
 /build
+.vscode/
+.devcontainer/
