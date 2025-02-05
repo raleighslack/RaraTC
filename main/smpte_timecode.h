@@ -30,6 +30,13 @@ typedef struct {
     uint8_t msb;
 } two_digits;
 
+typedef struct {
+    uint8_t frame;
+    uint8_t second;
+    uint8_t minute;
+    uint8_t hour;
+} simple_frame;
+
 uint8_t reverse_bits(uint8_t n);
 
 void convert_digits_to_single(two_digits* digits, uint8_t value);

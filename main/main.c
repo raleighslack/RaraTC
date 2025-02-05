@@ -20,22 +20,61 @@
 
 static const char *TAG = "main";
 
-static void periodic_timer_callback(void* arg); //stolen from example
+static void periodic_timecode_callback(void* arg);
+static void periodic_perframe_callback(void* arg);
 
-const esp_timer_create_args_t periodic_timer_args = {
-        .callback = &periodic_timer_callback,
+const esp_timer_create_args_t periodic_timecode_args = {
+        .callback = &periodic_timecode_callback,
         /* name is optional, but may help identify the timer when debugging */
-        .name = "periodic"
+        .name = "periodic_timecode"
 };
-esp_timer_handle_t periodic_timer;
+esp_timer_handle_t periodic_timecode;
+
+const esp_timer_create_args_t periodic_perframe_args = {
+        .callback = &periodic_perframe_callback,
+        /* name is optional, but may help identify the timer when debugging */
+        .name = "periodic_perframe"
+};
+esp_timer_handle_t periodic_perframe;
 /* The timer has been created but is not running yet */
 
-const float period_us = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*10000;
+const float period_us = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*1000000;
+const float half_period_us = period_us/2;
+const float frame_period_us = ((float)1/24) * 1000000;
 
-static void periodic_timer_callback(void* arg)
+simple_frame current_simple_frame = {0, 0, 0, 1};
+ltc_frame current_frame;
+uint8_t* current_bits[10];
+bool state = false;
+int bit_index = 0;
+int bit_local_counter = 0;
+
+static void periodic_timecode_callback(void* arg)
 {
-    int64_t time_since_boot = esp_timer_get_time();
-    ESP_LOGI(TAG, "Periodic timer called, time since boot: %lld us", time_since_boot);
+    // uint8_t bits[10] = &current_bits;
+    // uint8_t byte = bits[bit_index/8];
+    //get the bit, do logic checks, toggle pin.
+}
+
+static void periodic_perframe_callback(void* arg) {
+    current_simple_frame.frame++;
+    if(current_simple_frame.frame > LTC_FRAMERATE) {
+        current_simple_frame.frame = 0;
+        current_simple_frame.second++;
+        create_frame_from_timecode(&current_frame, current_simple_frame.frame, current_simple_frame.second, current_simple_frame.minute, current_simple_frame.hour);
+        create_bits_from_frame(current_bits, current_frame);
+    }
+    if(current_simple_frame.second>60) {
+        current_simple_frame.second = 0;
+        current_simple_frame.minute++;
+    }
+    if(current_simple_frame.minute>60) {
+        current_simple_frame.minute = 0;
+        current_simple_frame.hour++;
+    }
+    if(current_simple_frame.hour>24) {
+        current_simple_frame.hour = 0;
+    }
 }
 
 void print_binary(uint8_t* bits[10]) {
@@ -55,7 +94,8 @@ void print_binary(uint8_t* bits[10]) {
 void app_main(void)
 {
     esp_timer_init();
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timer, period_us));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_perframe, frame_period_us)); //one second
     
     ltc_frame testframe = {};
     create_frame_from_timecode(&testframe, 21, 16, 29, 05);
