@@ -19,5 +19,7 @@ void create_frame_from_timecode(ltc_frame* frame, uint8_t frames, uint8_t second
 }
 
 void create_bits_from_frame(uint8_t* bits[10], ltc_frame frame) {
-    
+    two_digits temp_digits;
+    convert_digits_to_single(&temp_digits, frame.frame);
+
 }
