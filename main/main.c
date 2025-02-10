@@ -44,7 +44,7 @@ void periodic_perframe_callback(void* arg) {
         current_simple_frame.frame = 0;
         current_simple_frame.second++;
         create_frame_from_timecode(&current_frame, current_simple_frame.frame, current_simple_frame.second, current_simple_frame.minute, current_simple_frame.hour);
-        create_bits_from_frame(current_bits, current_frame);
+        // create_bits_from_frame(current_bits, current_frame);
     }
     if(current_simple_frame.second>60) {
         current_simple_frame.second = 0;
@@ -59,19 +59,16 @@ void periodic_perframe_callback(void* arg) {
     }
 }
 
-void print_binary(uint8_t* bits[10]) {
+void print_binary(uint8_t bits[10]) {
     for (int i = 0; i < 10; i++) {
-        if (bits[i] == NULL) {
-            printf("NULL ");
-            continue;
-        }
         for (int j = 7; j >= 0; j--) {
-            printf("%d", (*bits[i] >> j) & 1);
+            printf("%d", (bits[i] >> j) & 1);
         }
         printf(" ");
     }
     printf("\n");
 }
+
 
 void app_main(void)
 {
@@ -99,15 +96,15 @@ void app_main(void)
     
     
     ltc_frame testframe = {};
-    create_frame_from_timecode(&testframe, 21, 16, 29, 05);
+    create_frame_from_timecode(&testframe, 24, 24, 24, 24);
 
-    uint8_t *test[10] = {};
+    uint8_t test[10] = {};
     create_bits_from_frame(test, testframe);
     print_binary(test);
 
     ESP_LOGI(TAG, "%.6f", period_us);
-    // while(true) {
-    //     ESP_LOGI(TAG, "%u", current_frame.frame);
-    //     sys_delay_ms(100);
-    // }
+    while(true) {
+        ESP_LOGI(TAG, "%u", current_frame.frame);
+        sys_delay_ms(100);
+    }
 }

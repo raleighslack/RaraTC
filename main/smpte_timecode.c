@@ -25,33 +25,33 @@ uint8_t reverse_bits(uint8_t n) {
     return n;
 }
 
-void create_bits_from_frame(uint8_t* bits[10], ltc_frame frame) {
-    uint8_t bit_array[10] = {};
+void create_bits_from_frame(uint8_t bits[10], ltc_frame frame) {
+    // uint8_t bit_array[10] = {};
 
-    for (int i = 0; i < 10; i++) {
-        bits[i] = &bit_array[i];
-    }
+    // for (int i = 0; i < 10; i++) {
+    //     bits[i] = &bit_array[i];
+    // }
 
     two_digits temp_digits_frame;
     convert_digits_to_single(&temp_digits_frame, frame.frame);
     two_digits temp_digits_user;
     convert_digits_to_single(&temp_digits_user, frame.user);
-    *bits[0] = reverse_bits((temp_digits_user.lsb & 0x0F) << 4) | reverse_bits(temp_digits_frame.lsb & 0x0F);
-    *bits[1] = reverse_bits((temp_digits_user.msb & 0x0F) << 4) | reverse_bits(temp_digits_frame.msb & 0x0F);
+    bits[0] = reverse_bits((temp_digits_user.lsb & 0x0F) << 4) | reverse_bits(temp_digits_frame.lsb & 0x0F);
+    bits[1] = reverse_bits((temp_digits_user.msb & 0x0F) << 4) | reverse_bits(temp_digits_frame.msb & 0x0F);
     two_digits temp_digits_frame1;
     convert_digits_to_single(&temp_digits_frame1, frame.second);
-    *bits[2] = reverse_bits((temp_digits_user.lsb & 0x0F) << 4) | reverse_bits(temp_digits_frame1.lsb & 0x0F);
-    *bits[3] = reverse_bits((temp_digits_user.msb & 0x0F) << 4) | reverse_bits(temp_digits_frame1.msb & 0x0F);
+    bits[2] = reverse_bits((temp_digits_user.lsb & 0x0F) << 4) | reverse_bits(temp_digits_frame1.lsb & 0x0F);
+    bits[3] = reverse_bits((temp_digits_user.msb & 0x0F) << 4) | reverse_bits(temp_digits_frame1.msb & 0x0F);
     two_digits temp_digits_frame2;
     convert_digits_to_single(&temp_digits_frame2, frame.minute);
-    *bits[4] = reverse_bits((temp_digits_user.lsb & 0x0F) << 4) | reverse_bits(temp_digits_frame2.lsb & 0x0F);
-    *bits[5] = reverse_bits((temp_digits_user.msb & 0x0F) << 4) | reverse_bits(temp_digits_frame2.msb & 0x0F);
+    bits[4] = reverse_bits((temp_digits_user.lsb & 0x0F) << 4) | reverse_bits(temp_digits_frame2.lsb & 0x0F);
+    bits[5] = reverse_bits((temp_digits_user.msb & 0x0F) << 4) | reverse_bits(temp_digits_frame2.msb & 0x0F);
     two_digits temp_digits_frame3;
     convert_digits_to_single(&temp_digits_frame3, frame.hour);
-    *bits[6] = reverse_bits((temp_digits_user.lsb & 0x0F) << 4) | reverse_bits(temp_digits_frame3.lsb & 0x0F);
-    *bits[7] = reverse_bits((temp_digits_user.msb & 0x0F) << 4) | reverse_bits(temp_digits_frame3.msb & 0x0F);
+    bits[6] = reverse_bits((temp_digits_user.lsb & 0x0F) << 4) | reverse_bits(temp_digits_frame3.lsb & 0x0F);
+    bits[7] = reverse_bits((temp_digits_user.msb & 0x0F) << 4) | reverse_bits(temp_digits_frame3.msb & 0x0F);
     uint8_t firsthalf = 0x3f;
     uint8_t secondhalf = 0xfd;
-    *bits[8] = firsthalf | firsthalf;
-    *bits[9] = secondhalf | secondhalf;
+    bits[8] = firsthalf;
+    bits[9] = secondhalf;
 }
