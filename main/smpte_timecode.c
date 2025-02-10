@@ -50,7 +50,8 @@ void create_bits_from_frame(uint8_t* bits[10], ltc_frame frame) {
     convert_digits_to_single(&temp_digits_frame3, frame.hour);
     *bits[6] = reverse_bits((temp_digits_user.lsb & 0x0F) << 4) | reverse_bits(temp_digits_frame3.lsb & 0x0F);
     *bits[7] = reverse_bits((temp_digits_user.msb & 0x0F) << 4) | reverse_bits(temp_digits_frame3.msb & 0x0F);
-
-    *bits[8] = (uint8_t)0X3f << 0;
-    *bits[9] = (uint8_t)0Xfd << 0;
+    uint8_t firsthalf = 0x3f;
+    uint8_t secondhalf = 0xfd;
+    *bits[8] = firsthalf | firsthalf;
+    *bits[9] = secondhalf | secondhalf;
 }

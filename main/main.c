@@ -20,29 +20,11 @@
 
 static const char *TAG = "main";
 
-static void periodic_timecode_callback(void* arg);
-static void periodic_perframe_callback(void* arg);
-
-const esp_timer_create_args_t periodic_timecode_args = {
-        .callback = &periodic_timecode_callback,
-        /* name is optional, but may help identify the timer when debugging */
-        .name = "periodic_timecode"
-};
-esp_timer_handle_t periodic_timecode;
-
-const esp_timer_create_args_t periodic_perframe_args = {
-        .callback = &periodic_perframe_callback,
-        /* name is optional, but may help identify the timer when debugging */
-        .name = "periodic_perframe"
-};
-esp_timer_handle_t periodic_perframe;
-/* The timer has been created but is not running yet */
-
 const float period_us = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*1000000;
 const float half_period_us = period_us/2;
 const float frame_period_us = ((float)1/24) * 1000000;
 
-simple_frame current_simple_frame = {0, 0, 0, 1};
+simple_frame current_simple_frame;
 ltc_frame current_frame;
 uint8_t* current_bits[10];
 bool state = false;
@@ -56,7 +38,7 @@ static void periodic_timecode_callback(void* arg)
     //get the bit, do logic checks, toggle pin.
 }
 
-static void periodic_perframe_callback(void* arg) {
+void periodic_perframe_callback(void* arg) {
     current_simple_frame.frame++;
     if(current_simple_frame.frame > LTC_FRAMERATE) {
         current_simple_frame.frame = 0;
@@ -93,20 +75,39 @@ void print_binary(uint8_t* bits[10]) {
 
 void app_main(void)
 {
-    esp_timer_init();
+    current_simple_frame.frame = 1;
+
+    const esp_timer_create_args_t periodic_timecode_args = {
+            .callback = &periodic_timecode_callback,
+            /* name is optional, but may help identify the timer when debugging */
+            .name = "periodic_timecode"
+    };
+    esp_timer_handle_t periodic_timecode;
+    ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
+
+    const esp_timer_create_args_t periodic_perframe_args = {
+            .callback = &periodic_perframe_callback,
+            /* name is optional, but may help identify the timer when debugging */
+            .name = "periodic_perframe"
+    };
+    esp_timer_handle_t periodic_perframe;
+    /* The timer has been created but is not running yet */
+
+    ESP_ERROR_CHECK(esp_timer_create(&periodic_perframe_args, &periodic_perframe));
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_perframe, frame_period_us)); //one second
+    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_perframe, frame_period_us));
+    
     
     ltc_frame testframe = {};
     create_frame_from_timecode(&testframe, 21, 16, 29, 05);
 
-    two_digits twodigis = {};
-    convert_digits_to_single(&twodigis, testframe.frame);
-    ESP_LOGI(TAG, "LSB: %u, MSB: %u", twodigis.lsb, twodigis.msb);
-
     uint8_t *test[10] = {};
     create_bits_from_frame(test, testframe);
+    print_binary(test);
 
     ESP_LOGI(TAG, "%.6f", period_us);
-    print_binary(test);
+    // while(true) {
+    //     ESP_LOGI(TAG, "%u", current_frame.frame);
+    //     sys_delay_ms(100);
+    // }
 }

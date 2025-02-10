@@ -30,11 +30,12 @@ typedef struct {
     uint8_t msb;
 } two_digits;
 
-typedef struct {
+typedef struct simple_frame{
     uint8_t frame;
     uint8_t second;
     uint8_t minute;
     uint8_t hour;
+    // simple_frame(){};
 } simple_frame;
 
 uint8_t reverse_bits(uint8_t n);
