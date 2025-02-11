@@ -39,29 +39,7 @@ bool get_bit(uint8_t value, uint8_t index) {
     return (value >> index) & 1;
 }
 
-void IRAM_ATTR periodic_timecode_callback(void* arg)
-{
-    // ESP_LOGI(TAG, "%u", bit_index);
-    bool bit = get_bit(current_bits[bit_index / 8], bit_index % 8); //finally, a use for the modulo
-    //get the bit, do logic checks, toggle pin.
-    if(bit_local_counter == 0) {
-        state = !state;
-    }
-    if(bit_local_counter == 1 && bit) {
-        state = !state;
-    }
-    gpio_set_level(LTC_OUTPUT_PIN, state);
-    bit_local_counter++;
-    if(bit_local_counter >1) {
-        bit_local_counter = 0;
-    }
-    bit_index++;
-    if(bit_index > 79) {
-        bit_index = 0;
-    }
-}
-
-void IRAM_ATTR periodic_perframe_callback(void* arg) {
+void periodic_perframe_callback() {
     current_simple_frame.frame++;
     if(current_simple_frame.frame > LTC_FRAMERATE) {
         current_simple_frame.frame = 0;
@@ -82,7 +60,30 @@ void IRAM_ATTR periodic_perframe_callback(void* arg) {
     create_bits_from_frame(current_bits, current_frame);
 }
 
-void  print_binary(uint8_t bits[10]) {
+void IRAM_ATTR periodic_timecode_callback(void* arg)
+{
+    // ESP_LOGI(TAG, "%u", bit_index);
+    bool bit = get_bit(current_bits[(bit_index / 8)], bit_index % 8); //finally, a use for the modulo
+    //get the bit, do logic checks, toggle pin.
+    if(bit_local_counter == 0) {
+        state = !state;
+    }
+    if(bit_local_counter == 1 && bit) {
+        state = !state;
+    }
+    gpio_set_level(LTC_OUTPUT_PIN, state);
+    bit_local_counter++;
+    if(bit_local_counter >1) {
+        bit_local_counter = 0;
+        bit_index++;
+    }
+    if(bit_index > 79) {
+        bit_index = 0;
+        periodic_perframe_callback();
+    }
+}
+
+void print_binary(uint8_t bits[10]) {
     for (int i = 0; i < 10; i++) {
         for (int j = 7; j >= 0; j--) {
             printf("%d", (bits[i] >> j) & 1);
@@ -94,7 +95,7 @@ void  print_binary(uint8_t bits[10]) {
 
 void app_main(void)
 {
-    current_simple_frame.hour = 1;
+    current_simple_frame.hour = 5;
 
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -112,21 +113,15 @@ void app_main(void)
     esp_timer_handle_t periodic_timecode;
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
 
-    const esp_timer_create_args_t periodic_perframe_args = {
-            .callback = &periodic_perframe_callback,
-            /* name is optional, but may help identify the timer when debugging */
-            .name = "periodic_perframe"
-    };
-    esp_timer_handle_t periodic_perframe;
+    // const esp_timer_create_args_t periodic_perframe_args = {
+    //         .callback = &periodic_perframe_callback,
+    //         /* name is optional, but may help identify the timer when debugging */
+    //         .name = "periodic_perframe"
+    // };
+    // esp_timer_handle_t periodic_perframe;
     /* The timer has been created but is not running yet */
 
-    ESP_ERROR_CHECK(esp_timer_create(&periodic_perframe_args, &periodic_perframe));
+    // ESP_ERROR_CHECK(esp_timer_create(&periodic_perframe_args, &periodic_perframe));
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_perframe, frame_period_us));
-
-    // ESP_LOGI(TAG, "%.6f", period_us);
-    // while(true) {
-    //     print_binary(current_bits);
-    //     sys_delay_ms(500);
-    // }
+    // ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_perframe, frame_period_us));
 }
