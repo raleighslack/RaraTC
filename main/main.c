@@ -7,10 +7,13 @@
 #include "driver/gpio.h"
 #include "smpte_timecode.h"
 #include "esp_sntp.h"
+#include "esp_wifi.h"
 
 #define LTC_OUTPUT_PIN      4
 #define LTC_FRAMERATE       24
 #define LTC_BITS_PER_FRAME  80
+#define WIFI_SSID           "RARATC"
+#define WIFI_PASSWORD       "password"
 
 #define GPIO_OUTPUT_PIN_SEL  ((1ULL<<LTC_OUTPUT_PIN) | (1ULL<<LTC_OUTPUT_PIN))
 
