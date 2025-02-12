@@ -7,7 +7,6 @@
 #include "driver/gpio.h"
 #include "smpte_timecode.h"
 #include "esp_sntp.h"
-#include <string.h>
 
 #define LTC_OUTPUT_PIN      4
 #define LTC_FRAMERATE       24
@@ -24,7 +23,7 @@ const float frame_period_us = ((float)1/LTC_FRAMERATE) * 1000000;
 simple_frame current_simple_frame;
 ltc_frame current_frame;
 uint8_t current_bits[10];
-bool state = false;
+bool state = true;
 int bit_index = 0; //value from 0-79, the current transmitting bit
 int bit_local_counter = 0; //value either 0 or 1, either first half of period or 2nd half
 
@@ -57,7 +56,7 @@ void periodic_perframe_callback() {
 void IRAM_ATTR periodic_timecode_callback(void* arg)
 {
     // ESP_LOGI(TAG, "%u", bit_index);
-    bool bit = get_bit(current_bits[(bit_index / 8)], bit_index % 8); //finally, a use for the modulo
+    bool bit = get_bit(reverse_bits(current_bits[(bit_index / 8)]), bit_index % 8); //finally, a use for the modulo
     //get the bit, do logic checks, toggle pin.
     if(bit_local_counter == 0) {
         state = !state;
