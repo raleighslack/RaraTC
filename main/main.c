@@ -9,15 +9,19 @@
 #include "esp_sntp.h"
 #include "esp_wifi.h"
 
+#define RTC_INPUT_PIN       5
+#define BTN_INPUT_PIN       3
 #define LTC_OUTPUT_PIN      4
 #define LTC_FRAMERATE       24
 #define LTC_BITS_PER_FRAME  80
 #define WIFI_SSID           "RARATC"
 #define WIFI_PASSWORD       "password"
 
-#define GPIO_OUTPUT_PIN_SEL  ((1ULL<<LTC_OUTPUT_PIN) | (1ULL<<LTC_OUTPUT_PIN))
+#define GPIO_OUTPUT_PIN_SEL ((1ULL<<LTC_OUTPUT_PIN) | (1ULL<<LTC_OUTPUT_PIN))
+#define GPIO_INPUT_PIN_SEL  ((1ULL<<RTC_INPUT_PIN) | (1ULL<<BTN_INPUT_PIN))
 
 static const char *TAG = "main";
+static QueueHandle_t gpio_evt_queue = NULL;
 
 const float period_us = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*1000000;
 const float half_period_us = period_us/2;
@@ -56,6 +60,12 @@ void periodic_perframe_callback() {
     create_bits_from_frame(current_bits, current_frame);
 }
 
+static void IRAM_ATTR gpio_isr_handler(void* arg)
+{
+    uint32_t gpio_num = (uint32_t) arg;
+    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+}
+
 void IRAM_ATTR periodic_timecode_callback(void* arg)
 {
     // ESP_LOGI(TAG, "%u", bit_index);
@@ -91,7 +101,7 @@ void print_binary(uint8_t bits[10]) {
 
 void app_main(void)
 {
-    current_simple_frame.hour = 5;
+    current_simple_frame.hour = 1;
 
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -100,6 +110,17 @@ void app_main(void)
     io_conf.pull_down_en = 0;
     io_conf.pull_up_en = 0;
     gpio_config(&io_conf);
+
+    io_conf.intr_type = GPIO_INTR_ANYEDGE;
+    io_conf.mode = GPIO_MODE_INPUT;
+    io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
+    gpio_config(&io_conf);
+
+    gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
+
+    // gpio_set_intr_type(BTN_INPUT_PIN, GPIO_INTR_POSEDGE);
+    gpio_install_isr_service(0);
+    gpio_isr_handler_add(BTN_INPUT_PIN, gpio_isr_handler, (void*) BTN_INPUT_PIN);
 
     const esp_timer_create_args_t periodic_timecode_args = {
             .callback = &periodic_timecode_callback,
