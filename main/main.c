@@ -101,7 +101,7 @@ void print_binary(uint8_t bits[10]) {
 
 void app_main(void)
 {
-    current_simple_frame.hour = 1;
+    current_simple_frame.hour = 5;
 
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;

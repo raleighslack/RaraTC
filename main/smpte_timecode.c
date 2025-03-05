@@ -1,5 +1,4 @@
 #include "smpte_timecode.h"
-#include <stdio.h>
 
 void convert_digits_to_single(two_digits* digits, uint8_t value) {
     digits->lsb = value % 10;
