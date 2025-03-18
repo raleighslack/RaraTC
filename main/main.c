@@ -19,8 +19,6 @@
 #define SDA_PIN             7
 #define LTC_FRAMERATE       24
 #define LTC_BITS_PER_FRAME  80
-#define WIFI_SSID           "RARATC"
-#define WIFI_PASSWORD       "password"
 
 #define GPIO_OUTPUT_PIN_SEL ((1ULL<<LTC_OUTPUT_PIN) | (1ULL<<LTC_OUTPUT_PIN))
 #define GPIO_INPUT_PIN_SEL  ((1ULL<<RTC_INPUT_PIN) | (1ULL<<BTN_INPUT_PIN))
@@ -100,8 +98,8 @@ void task(void *ignore)
     conf.mode = I2C_MODE_MASTER;
     conf.sda_io_num = SDA_PIN;
     conf.scl_io_num = SCL_PIN;
-    conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+    conf.sda_pullup_en = GPIO_PULLUP_DISABLE;
+    conf.scl_pullup_en = GPIO_PULLUP_DISABLE;
     conf.master.clk_speed = 200000;
     i2c_param_config(I2C_NUM_0, &conf);
 
