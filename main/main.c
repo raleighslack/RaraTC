@@ -1,5 +1,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <driver/i2c.h>
 #include "esp_mac.h"
 #include "esp_log.h"
 #include "driver/rmt_tx.h"
@@ -9,9 +10,13 @@
 #include "esp_sntp.h"
 #include "esp_wifi.h"
 
-#define RTC_INPUT_PIN       5
+#define USB_WAKE            0
+#define LIPO_VOLTAGE        1
 #define BTN_INPUT_PIN       3
 #define LTC_OUTPUT_PIN      4
+#define RTC_INPUT_PIN       5
+#define SCL_PIN             6
+#define SDA_PIN             7
 #define LTC_FRAMERATE       24
 #define LTC_BITS_PER_FRAME  80
 #define WIFI_SSID           "RARATC"
@@ -89,6 +94,45 @@ void IRAM_ATTR periodic_timecode_callback(void* arg)
     }
 }
 
+void task(void *ignore)
+{
+    i2c_config_t conf;
+    conf.mode = I2C_MODE_MASTER;
+    conf.sda_io_num = SDA_PIN;
+    conf.scl_io_num = SCL_PIN;
+    conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
+    conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
+    conf.master.clk_speed = 100000;
+    i2c_param_config(I2C_NUM_0, &conf);
+
+    i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
+
+    while (1)
+    {
+        esp_err_t res;
+        printf("     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\n");
+        printf("00:         ");
+        for (uint8_t i = 3; i < 0x78; i++)
+        {
+            i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+            i2c_master_start(cmd);
+            i2c_master_write_byte(cmd, (i << 1) | I2C_MASTER_WRITE, 1 /* expect ack */);
+            i2c_master_stop(cmd);
+    
+            res = i2c_master_cmd_begin(I2C_NUM_0, cmd, 10 / portTICK_PERIOD_MS);
+            if (i % 16 == 0)
+                printf("\n%.2x:", i);
+            if (res == 0)
+                printf(" %.2x", i);
+            else
+                printf(" --");
+            i2c_cmd_link_delete(cmd);
+        }
+        printf("\n\n");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+}
+
 void print_binary(uint8_t bits[10]) {
     for (int i = 0; i < 10; i++) {
         for (int j = 7; j >= 0; j--) {
@@ -118,7 +162,6 @@ void app_main(void)
 
     gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
 
-    // gpio_set_intr_type(BTN_INPUT_PIN, GPIO_INTR_POSEDGE);
     gpio_install_isr_service(0);
     gpio_isr_handler_add(BTN_INPUT_PIN, gpio_isr_handler, (void*) BTN_INPUT_PIN);
 
@@ -130,15 +173,7 @@ void app_main(void)
     esp_timer_handle_t periodic_timecode;
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
 
-    // const esp_timer_create_args_t periodic_perframe_args = {
-    //         .callback = &periodic_perframe_callback,
-    //         /* name is optional, but may help identify the timer when debugging */
-    //         .name = "periodic_perframe"
-    // };
-    // esp_timer_handle_t periodic_perframe;
-    /* The timer has been created but is not running yet */
-
-    // ESP_ERROR_CHECK(esp_timer_create(&periodic_perframe_args, &periodic_perframe));
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
-    // ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_perframe, frame_period_us));
+
+    // xTaskCreatePinnedToCore(task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL, 0);
 }
