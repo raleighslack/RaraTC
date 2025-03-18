@@ -102,7 +102,7 @@ void task(void *ignore)
     conf.scl_io_num = SCL_PIN;
     conf.sda_pullup_en = GPIO_PULLUP_ENABLE;
     conf.scl_pullup_en = GPIO_PULLUP_ENABLE;
-    conf.master.clk_speed = 100000;
+    conf.master.clk_speed = 200000;
     i2c_param_config(I2C_NUM_0, &conf);
 
     i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
@@ -129,7 +129,7 @@ void task(void *ignore)
             i2c_cmd_link_delete(cmd);
         }
         printf("\n\n");
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        vTaskDelay(pdMS_TO_TICKS(10000));
     }
 }
 
