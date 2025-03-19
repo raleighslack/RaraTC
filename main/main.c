@@ -7,8 +7,6 @@
 #include "driver/gpio.h"
 #include "smpte_timecode.h"
 #include "mcp7940.h"
-#include "esp_sntp.h"
-#include "esp_wifi.h"
 
 #define USB_WAKE            0
 #define LIPO_VOLTAGE        1
@@ -32,11 +30,11 @@ simple_frame current_simple_frame;
 ltc_frame current_frame;
 uint8_t current_bits[10];
 bool state = true;
-int bit_index = 0; //value from 0-79, the current transmitting bit
-int bit_local_counter = 0; //value either 0 or 1, either first half of period or 2nd half
+int bit_index = 0;                              //value from 0-79, the current transmitting bit
+int bit_local_counter = 0;                      //value either 0 or 1, either first half of period or 2nd half
 
 bool get_bit(uint8_t value, uint8_t index) {
-    if (index > 7) return false;  // Ensure index is within bounds
+    if (index > 7) return false;                // Ensure index is within bounds
     return (value >> index) & 1;
 }
 
@@ -102,7 +100,9 @@ void print_binary(uint8_t bits[10]) {
 
 void app_main(void)
 {
-    current_simple_frame.hour = 5;
+    ESP_ERROR_CHECK(init_rtc());
+    current_simple_frame.hour = get_rtc_hours();
+    current_simple_frame.minute = get_rtc_minutes();
 
     gpio_config_t io_conf = {};
     io_conf.intr_type = GPIO_INTR_DISABLE;
@@ -132,15 +132,14 @@ void app_main(void)
 
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
 
-    ESP_ERROR_CHECK(init_rtc());
-
-    ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x08));
-
-    ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x00));
+    if((get_rtc_register(REG_SECONDS) | 127) != 0xFF) {
+        ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x08));
+        ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));
+    }
 
     while(1) {
-        ESP_LOGI(TAG, "RTC_REGISTER: %d", get_rtc_register(REG_SECONDS));
-        vTaskDelay(25);
+        ESP_LOGI(TAG, "REG_SECONDS: %d:%d:%d", get_rtc_hours(), get_rtc_minutes(), get_rtc_seconds());
+        vTaskDelay(100);
     }
     
 
