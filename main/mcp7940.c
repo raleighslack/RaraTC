@@ -1,28 +1,20 @@
 #include "mcp7940.h"
 
-i2c_master_dev_handle_t dev_handle;
-i2c_master_bus_handle_t bus_handle;
+esp_err_t init_rtc(void) {
+    int i2c_master_port = 0;
 
-void init_rtc(int SCL_PIN, int SDA_PIN, int DEVICE_ADDR) {
-    i2c_master_bus_config_t i2c_mst_config = {
-        .clk_source = I2C_CLK_SRC_DEFAULT,
-        .i2c_port = -1,
-        .scl_io_num = SCL_PIN,
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
         .sda_io_num = SDA_PIN,
-        .glitch_ignore_cnt = 7,
-        .flags.enable_internal_pullup = false,
+        .scl_io_num = SCL_PIN,
+        .sda_pullup_en = GPIO_PULLUP_DISABLE,
+        .scl_pullup_en = GPIO_PULLUP_DISABLE,
+        .master.clk_speed = 100000,
     };
-    
-    ESP_ERROR_CHECK(i2c_new_master_bus(&i2c_mst_config, &bus_handle));
-    
-    i2c_device_config_t dev_cfg = {
-        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
-        .device_address = DEVICE_ADDR,
-        .scl_speed_hz = 200000,
-    };
-    
-    ESP_ERROR_CHECK(i2c_master_bus_add_device(bus_handle, &dev_cfg, &dev_handle));
-    // ESP_ERROR_CHECK(i2c_master_transmit(bus_handle));
+
+    i2c_param_config(i2c_master_port, &conf);
+
+    return i2c_driver_install(i2c_master_port, conf.mode, 0, 0, 0);
 }
 
 void set_rtc_hour_mode24(int HOUR) {
@@ -30,4 +22,17 @@ void set_rtc_hour_mode24(int HOUR) {
     //bit 6 is 12 or 24 hour selection
     //bit 5-4 is from 0-2 in bcd
     //bit 3-0 is from 0-9 in bcd
+}
+
+uint8_t get_rtc_register(uint8_t REG) {
+    uint8_t data;
+    ESP_ERROR_CHECK(i2c_master_write_read_device(0, MCP7940_I2C, &REG, 1, &data, 1, -1));
+    return data;
+}
+
+esp_err_t set_rtc_register(uint8_t REG, uint8_t DATA) {
+    int ret;
+    uint8_t write_buf[2] = {REG, DATA};
+
+    return i2c_master_write_to_device(0, MCP7940_I2C, write_buf, sizeof(write_buf), -1);
 }

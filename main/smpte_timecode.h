@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include "esp_mac.h"
 #include "driver/rmt_encoder.h"
 #include <stdio.h>
 

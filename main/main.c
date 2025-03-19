@@ -1,6 +1,5 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include <driver/i2c.h>
 #include "esp_mac.h"
 #include "esp_log.h"
 #include "driver/rmt_tx.h"
@@ -16,8 +15,6 @@
 #define BTN_INPUT_PIN       3
 #define LTC_OUTPUT_PIN      4
 #define RTC_INPUT_PIN       5
-#define SCL_PIN             6
-#define SDA_PIN             7
 #define LTC_FRAMERATE       24
 #define LTC_BITS_PER_FRAME  80
 
@@ -93,45 +90,6 @@ void IRAM_ATTR periodic_timecode_callback(void* arg)
     }
 }
 
-void task(void *ignore)
-{
-    i2c_config_t conf;
-    conf.mode = I2C_MODE_MASTER;
-    conf.sda_io_num = SDA_PIN;
-    conf.scl_io_num = SCL_PIN;
-    conf.sda_pullup_en = GPIO_PULLUP_DISABLE;
-    conf.scl_pullup_en = GPIO_PULLUP_DISABLE;
-    conf.master.clk_speed = 200000;
-    i2c_param_config(I2C_NUM_0, &conf);
-
-    i2c_driver_install(I2C_NUM_0, I2C_MODE_MASTER, 0, 0, 0);
-
-    while (1)
-    {
-        esp_err_t res;
-        printf("     0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f\n");
-        printf("00:         ");
-        for (uint8_t i = 3; i < 0x78; i++)
-        {
-            i2c_cmd_handle_t cmd = i2c_cmd_link_create();
-            i2c_master_start(cmd);
-            i2c_master_write_byte(cmd, (i << 1) | I2C_MASTER_WRITE, 1 /* expect ack */);
-            i2c_master_stop(cmd);
-    
-            res = i2c_master_cmd_begin(I2C_NUM_0, cmd, 10 / portTICK_PERIOD_MS);
-            if (i % 16 == 0)
-                printf("\n%.2x:", i);
-            if (res == 0)
-                printf(" %.2x", i);
-            else
-                printf(" --");
-            i2c_cmd_link_delete(cmd);
-        }
-        printf("\n\n");
-        vTaskDelay(pdMS_TO_TICKS(10000));
-    }
-}
-
 void print_binary(uint8_t bits[10]) {
     for (int i = 0; i < 10; i++) {
         for (int j = 7; j >= 0; j--) {
@@ -173,6 +131,18 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
 
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
+
+    ESP_ERROR_CHECK(init_rtc());
+
+    ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x08));
+
+    ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x00));
+
+    while(1) {
+        ESP_LOGI(TAG, "RTC_REGISTER: %d", get_rtc_register(REG_SECONDS));
+        vTaskDelay(25);
+    }
+    
 
     // xTaskCreatePinnedToCore(task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL, 0);
 }
