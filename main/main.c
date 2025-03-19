@@ -7,6 +7,7 @@
 #include "esp_timer.h"
 #include "driver/gpio.h"
 #include "smpte_timecode.h"
+#include "mcp7940.h"
 #include "esp_sntp.h"
 #include "esp_wifi.h"
 
