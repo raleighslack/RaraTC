@@ -118,8 +118,8 @@ void app_main(void)
 
     gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
 
-    gpio_install_isr_service(ESP_INTR_FLAG_EDGE);
-    gpio_isr_handler_add(RTC_INPUT_PIN, gpio_isr_handler, (void*) RTC_INPUT_PIN);
+    // gpio_install_isr_service(ESP_INTR_FLAG_EDGE);
+    // gpio_isr_handler_add(RTC_INPUT_PIN, gpio_isr_handler, (void*) RTC_INPUT_PIN);
 
     const esp_timer_create_args_t periodic_timecode_args = {
             .callback = &periodic_timecode_callback,
