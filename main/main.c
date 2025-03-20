@@ -2,7 +2,6 @@
 #include "freertos/task.h"
 #include "esp_mac.h"
 #include "esp_log.h"
-#include "driver/rmt_tx.h"
 #include "esp_timer.h"
 #include "driver/gpio.h"
 #include "smpte_timecode.h"
@@ -20,7 +19,6 @@
 #define GPIO_INPUT_PIN_SEL  ((1ULL<<RTC_INPUT_PIN) | (1ULL<<BTN_INPUT_PIN))
 
 static const char *TAG = "main";
-static QueueHandle_t gpio_evt_queue = NULL;
 
 const float period_us = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*1000000;
 const float half_period_us = period_us/2;
@@ -59,11 +57,10 @@ void periodic_perframe_callback() {
     create_bits_from_frame(current_bits, current_frame);
 }
 
-static void IRAM_ATTR gpio_isr_handler(void* arg)
+static void gpio_isr_handlerr(void* arg)
 {
-    uint32_t gpio_num = (uint32_t) arg;
-    ESP_LOGI(TAG, "AWRAR");
-    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+    int gpio_num = (int) arg;
+    ESP_LOGI(TAG, "%d", gpio_num);
 }
 
 void IRAM_ATTR periodic_timecode_callback(void* arg)
@@ -107,19 +104,17 @@ void app_main(void)
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_OUTPUT;
     io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
-    io_conf.pull_down_en = 0;
-    io_conf.pull_up_en = 0;
     gpio_config(&io_conf);
 
     io_conf.intr_type = GPIO_INTR_ANYEDGE;
     io_conf.mode = GPIO_MODE_INPUT;
     io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
+    io_conf.pull_up_en = false;
+    io_conf.pull_down_en = false;
     gpio_config(&io_conf);
 
-    gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
-
-    // gpio_install_isr_service(ESP_INTR_FLAG_EDGE);
-    // gpio_isr_handler_add(RTC_INPUT_PIN, gpio_isr_handler, (void*) RTC_INPUT_PIN);
+    ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_IRAM));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(RTC_INPUT_PIN, gpio_isr_handlerr, (void*) RTC_INPUT_PIN));
 
     const esp_timer_create_args_t periodic_timecode_args = {
             .callback = &periodic_timecode_callback,
@@ -130,16 +125,15 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
 
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
+    // ESP_ERROR_CHECK(esp_timer_stop(periodic_timecode));
 
     if((get_rtc_register(REG_SECONDS) | 127) != 0xFF) {
-        ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x48));                           //sets 1hz square wave output, and external clock input
+        ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x48));                           //sets 1hz square wave output, and external clock input in the rtc
         ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));                           //tells the rtc to actually start keeping time
     }
 
     while(1) {
-        ESP_LOGI(TAG, "DATE: %d:%d:%d, TIME: %d:%d:%d", get_rtc_year(), get_rtc_month(), get_rtc_date(), get_rtc_hours(), get_rtc_minutes(), get_rtc_seconds());
+        ESP_LOGI(TAG, "TIME: %d:%d:%d", get_rtc_hours(), get_rtc_minutes(), get_rtc_seconds());
         vTaskDelay(100);
     }
-    
-    // xTaskCreatePinnedToCore(task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL, 0);
 }
