@@ -25,18 +25,32 @@
 #define AM_INDICATOR        0x00
 #define PM_INDICATOR        0x01
 
+#define DAY_SUNDAY          1
+#define DAY_MONDAY          2
+#define DAY_TUESDAY         3
+#define DAY_WEDNESDAY       4
+#define DAY_THURSDAY        5
+#define DAY_FRIDAY          6
+#define DAY_SATURDAY        7
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 esp_err_t init_rtc(void);
+//Getters
 uint8_t get_rtc_seconds();
 uint8_t get_rtc_minutes();
 uint8_t get_rtc_hours();
-void set_rtc_hour_mode24(uint8_t HOUR);
-void set_rtc_hour_mode12(uint8_t AM_OR_PM, uint8_t HOUR);
+uint8_t get_rtc_weekday();
+uint8_t get_rtc_date();
+uint8_t get_rtc_month();
+uint8_t get_rtc_year();
 uint8_t get_rtc_register(uint8_t REG);
+//Setters
+esp_err_t set_rtc_seconds(uint8_t seconds);
+esp_err_t set_rtc_hour_mode24(uint8_t HOUR);
+esp_err_t set_rtc_hour_mode12(uint8_t AM_OR_PM, uint8_t HOUR);
 esp_err_t set_rtc_register(uint8_t REG, uint8_t DATA);
 
 #ifdef __cplusplus

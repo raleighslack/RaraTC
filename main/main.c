@@ -30,11 +30,11 @@ simple_frame current_simple_frame;
 ltc_frame current_frame;
 uint8_t current_bits[10];
 bool state = true;
-int bit_index = 0;                              //value from 0-79, the current transmitting bit
-int bit_local_counter = 0;                      //value either 0 or 1, either first half of period or 2nd half
+int bit_index = 0;                                                                      //value from 0-79, the current transmitting bit
+int bit_local_counter = 0;                                                              //value either 0 or 1, either first half of period or 2nd half
 
 bool get_bit(uint8_t value, uint8_t index) {
-    if (index > 7) return false;                // Ensure index is within bounds
+    if (index > 7) return false;                                                        // Ensure index is within bounds
     return (value >> index) & 1;
 }
 
@@ -62,14 +62,13 @@ void periodic_perframe_callback() {
 static void IRAM_ATTR gpio_isr_handler(void* arg)
 {
     uint32_t gpio_num = (uint32_t) arg;
+    ESP_LOGI(TAG, "AWRAR");
     xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
 }
 
 void IRAM_ATTR periodic_timecode_callback(void* arg)
 {
-    // ESP_LOGI(TAG, "%u", bit_index);
-    bool bit = get_bit(reverse_bits(current_bits[(bit_index / 8)]), bit_index % 8); //finally, a use for the modulo
-    //get the bit, do logic checks, toggle pin.
+    bool bit = get_bit(reverse_bits(current_bits[(bit_index / 8)]), bit_index % 8);     //finally, a use for the modulo
     if(bit_local_counter == 0) {
         state = !state;
     }
@@ -100,7 +99,7 @@ void print_binary(uint8_t bits[10]) {
 
 void app_main(void)
 {
-    ESP_ERROR_CHECK(init_rtc());
+    ESP_ERROR_CHECK(init_rtc());                                                        //Initializes the RTC
     current_simple_frame.hour = get_rtc_hours();
     current_simple_frame.minute = get_rtc_minutes();
 
@@ -119,8 +118,8 @@ void app_main(void)
 
     gpio_evt_queue = xQueueCreate(10, sizeof(uint32_t));
 
-    gpio_install_isr_service(0);
-    gpio_isr_handler_add(BTN_INPUT_PIN, gpio_isr_handler, (void*) BTN_INPUT_PIN);
+    gpio_install_isr_service(ESP_INTR_FLAG_EDGE);
+    gpio_isr_handler_add(RTC_INPUT_PIN, gpio_isr_handler, (void*) RTC_INPUT_PIN);
 
     const esp_timer_create_args_t periodic_timecode_args = {
             .callback = &periodic_timecode_callback,
@@ -133,15 +132,14 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
 
     if((get_rtc_register(REG_SECONDS) | 127) != 0xFF) {
-        ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x08));
-        ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));
+        ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x48));                           //sets 1hz square wave output, and external clock input
+        ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));                           //tells the rtc to actually start keeping time
     }
 
     while(1) {
-        ESP_LOGI(TAG, "REG_SECONDS: %d:%d:%d", get_rtc_hours(), get_rtc_minutes(), get_rtc_seconds());
+        ESP_LOGI(TAG, "DATE: %d:%d:%d, TIME: %d:%d:%d", get_rtc_year(), get_rtc_month(), get_rtc_date(), get_rtc_hours(), get_rtc_minutes(), get_rtc_seconds());
         vTaskDelay(100);
     }
     
-
     // xTaskCreatePinnedToCore(task, TAG, configMINIMAL_STACK_SIZE * 8, NULL, 5, NULL, 0);
 }
