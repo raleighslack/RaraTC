@@ -41,14 +41,17 @@ static void gpio_task(void* arg) {
     int gpio_num;
     while (1) {
         if (xQueueReceive(gpio_evt_queue, &gpio_num, portMAX_DELAY)) {
-            ESP_LOGI(TAG, "GPIO %d triggered", gpio_num);
+            if(gpio_num == RTC_INPUT_PIN) {
+                uint8_t hours = get_rtc_hours();
+                uint8_t minutes = get_rtc_minutes();
+                uint8_t seconds = get_rtc_seconds();
+                int timeSinceTenSecs = ((hours * 60 * 60) + (minutes * 60) + seconds) - 10;
+                ESP_LOGI(TAG, "RTC ISR: %d:%d:%d, TIME SINCE 10secs: %d", hours, minutes, seconds, timeSinceTenSecs);
+            } else {
+                ESP_LOGI(TAG, "BTN ISR");
+            }
         }
     }
-}
-
-static void perframe_task(void* arg) {
-    volatile int bit_index_local = 0;
-    volatile int bit_local_counter_local = 0;
 }
 
 void periodic_perframe_callback() {
@@ -76,10 +79,6 @@ static void gpio_isr_handler(void* arg)
 {
     int gpio_num = (int) arg;
     xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
-}
-
-static void btn_isr_handler() {
-
 }
 
 void IRAM_ATTR periodic_timecode_callback(void* arg)
@@ -154,10 +153,5 @@ void app_main(void)
     if((get_rtc_register(REG_SECONDS) | 127) != 0xFF) {
         ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x48));                           //sets 1hz square wave output, and external clock input in the rtc
         ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));                           //tells the rtc to actually start keeping time
-    }
-
-    while(1) {
-        ESP_LOGI(TAG, "TIME: %d:%d:%d", get_rtc_hours(), get_rtc_minutes(), get_rtc_seconds());
-        vTaskDelay(100);
     }
 }
