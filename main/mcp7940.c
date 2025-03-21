@@ -3,10 +3,20 @@
 i2c_master_bus_handle_t bus_handle;
 i2c_master_dev_handle_t dev_handle;
 
+static esp_err_t i2c_get_port(int port, i2c_port_t *i2c_port) {
+    if (port >= I2C_NUM_MAX) {
+        return ESP_FAIL;
+    }
+    *i2c_port = port;
+    return ESP_OK;
+}
+
 esp_err_t init_rtc(void) {
+    i2c_port_t port;
+    ESP_ERROR_CHECK(i2c_get_port(0, &port));
     i2c_master_bus_config_t i2c_mst_config = {
         .clk_source = I2C_CLK_SRC_DEFAULT,
-        .i2c_port = 0,
+        .i2c_port = port,
         .scl_io_num = SCL_PIN,
         .sda_io_num = SDA_PIN,
         .glitch_ignore_cnt = 7,

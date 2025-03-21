@@ -37,6 +37,7 @@
 extern "C" {
 #endif
 
+static esp_err_t i2c_get_port(int port, i2c_port_t *i2c_port);
 esp_err_t init_rtc(void);
 //Getters
 uint8_t get_rtc_seconds();
