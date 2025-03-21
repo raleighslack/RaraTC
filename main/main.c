@@ -46,6 +46,11 @@ static void gpio_task(void* arg) {
     }
 }
 
+static void perframe_task(void* arg) {
+    volatile int bit_index_local = 0;
+    volatile int bit_local_counter_local = 0;
+}
+
 void periodic_perframe_callback() {
     current_simple_frame.frame++;
     if(current_simple_frame.frame >= LTC_FRAMERATE) {
@@ -71,6 +76,10 @@ static void gpio_isr_handler(void* arg)
 {
     int gpio_num = (int) arg;
     xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+}
+
+static void btn_isr_handler() {
+
 }
 
 void IRAM_ATTR periodic_timecode_callback(void* arg)
@@ -142,15 +151,10 @@ void app_main(void)
     gpio_evt_queue = xQueueCreate(10, sizeof(int));
     xTaskCreate(gpio_task, "gpio_task", 2048, NULL, 10, NULL);
 
-
     if((get_rtc_register(REG_SECONDS) | 127) != 0xFF) {
         ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x48));                           //sets 1hz square wave output, and external clock input in the rtc
         ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));                           //tells the rtc to actually start keeping time
     }
-    ESP_LOGI(TAG, "TIME: %d:%d:%d", get_rtc_hours(), get_rtc_minutes(), get_rtc_seconds());
-    ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0xF0));
-    vTaskDelay(250);
-    ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x81));
 
     while(1) {
         ESP_LOGI(TAG, "TIME: %d:%d:%d", get_rtc_hours(), get_rtc_minutes(), get_rtc_seconds());
