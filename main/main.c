@@ -3,6 +3,7 @@
 #include "esp_mac.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_now.h"
 #include "driver/gpio.h"
 #include "smpte_timecode.h"
 #include "mcp7940.h"
@@ -25,6 +26,7 @@ const float period_us = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*1000000;
 const int64_t half_period_us = period_us/2;
 const float frame_period_us = ((float)1/LTC_FRAMERATE) * 1000000;
 
+int frameOffset = 25;
 bool timerIsRunning = false;
 simple_frame current_simple_frame;
 ltc_frame current_frame;
@@ -49,16 +51,17 @@ static void gpio_task(void* arg) {
                 uint8_t seconds = get_rtc_seconds();
 
                 int timeSinceTenSecs = ((hours * 60 * 60) + (minutes * 60) + seconds) - 10;
-                ESP_LOGI(TAG, "RTC ISR: %d:%d:%d, TIME SINCE 10secs: %d", hours, minutes, seconds, timeSinceTenSecs);
 
                 if (timerIsRunning) { //Makes sure the timer is not running, in case of updating the rtc inbetween frames
                     ESP_ERROR_CHECK(esp_timer_stop(periodic_timecode));
                 }
 
-                current_simple_frame.frame = 0;
-                current_simple_frame.second = seconds;
+                current_simple_frame.frame = 0 + (frameOffset % LTC_FRAMERATE);
+                current_simple_frame.second = seconds + (frameOffset / LTC_FRAMERATE);
                 current_simple_frame.minute = minutes;
                 current_simple_frame.hour = hours;
+
+                ESP_LOGI(TAG, "TC ISR: %d:%d:%d:%d, TIME SINCE 10secs: %d", current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame, timeSinceTenSecs);
 
                 ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
                 timerIsRunning = true;
