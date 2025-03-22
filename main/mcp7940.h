@@ -58,7 +58,7 @@ esp_err_t set_rtc_minutes(uint8_t minutes);
 esp_err_t set_rtc_hour_mode24(uint8_t hour);
 esp_err_t set_rtc_weekday(uint8_t weekday);
 esp_err_t set_rtc_date(uint8_t date);
-esp_err_t set_rtc_month(uint8_t month);
+esp_err_t set_rtc_month(uint8_t month, uint8_t year);
 esp_err_t set_rtc_year(uint8_t year); //without the 20
 esp_err_t set_rtc_register(uint8_t REG, uint8_t DATA);
 

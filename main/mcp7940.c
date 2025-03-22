@@ -126,40 +126,51 @@ esp_err_t set_rtc_hour_mode24(uint8_t hour) {
     return i2c_master_transmit(dev_handle, buffer, sizeof(buffer), -1);
 }
 
-esp_err_t set_rtc_date_from_bt(uint8_t year, uint8_t month, uint8_t date, uint8_t weekday, uint8_t hour, uint8_t minute, uint8_t second) {
-    set_rtc_register(REG_SECONDS, 0x00);//Stops the rtc from counting.
-    set_rtc_register(REG_CONTROL, 0x00);//Stops the rtc from counting using the external oscillator. 
-    esp_err_t status = ESP_OK;
+esp_err_t set_rtc_weekday(uint8_t weekday) {
+    uint8_t weekdayencoded = weekday & 0b0111;
+    uint8_t weekdaybuffer[2] = {REG_WEEKDAY, weekdayencoded};
+    return i2c_master_transmit(dev_handle, weekdaybuffer, sizeof(weekdaybuffer), -1);
+}
 
-    uint8_t yeartens = (year / 10) & 0b1111;
-    uint8_t yearones = (year % 10) & 0b1111;
-    uint8_t yearencoded = ((yeartens << 4) | yearones);
-    uint8_t yearbuffer[2] = {REG_YEAR, yearencoded};
-    status += i2c_master_transmit(dev_handle, yearbuffer, sizeof(yearbuffer), -1);
+esp_err_t set_rtc_date(uint8_t date) {
+    uint8_t datetens = (date / 10) & 0b0011;
+    uint8_t dateones = (date % 10) & 0b1111;
+    uint8_t dateencoded = (datetens << 4) | dateones;
+    uint8_t datebuffer[2] = {REG_DATE, dateencoded};
+    return i2c_master_transmit(dev_handle, datebuffer, sizeof(datebuffer), -1);
+}
 
+esp_err_t set_rtc_month(uint8_t month, uint8_t year) {
     uint8_t monthtens = (month / 10) & 0b0001;
     uint8_t monthones = (month % 10) & 0b1111;
     bool isLeapYear = (year%4==0) ? true : false;
     uint8_t monthencoded = (isLeapYear << 6) | (monthtens << 4) | monthones;
     uint8_t monthbuffer[2] = {REG_MONTH, monthencoded};
-    status += i2c_master_transmit(dev_handle, monthbuffer, sizeof(monthbuffer), -1);
+    return i2c_master_transmit(dev_handle, monthbuffer, sizeof(monthbuffer), -1);
+}
 
-    uint8_t datetens = (date / 10) & 0b0011;
-    uint8_t dateones = (date % 10) & 0b1111;
-    uint8_t dateencoded = (datetens << 4) | dateones;
-    uint8_t datebuffer[2] = {REG_DATE, dateencoded};
-    status += i2c_master_transmit(dev_handle, datebuffer, sizeof(datebuffer), -1);
+esp_err_t set_rtc_year(uint8_t year) {
+    uint8_t yeartens = (year / 10) & 0b1111;
+    uint8_t yearones = (year % 10) & 0b1111;
+    uint8_t yearencoded = ((yeartens << 4) | yearones);
+    uint8_t yearbuffer[2] = {REG_YEAR, yearencoded};
+    return i2c_master_transmit(dev_handle, yearbuffer, sizeof(yearbuffer), -1);
+}
 
-    uint8_t weekdayencoded = weekday & 0b0111;
-    uint8_t weekdaybuffer[2] = {REG_WEEKDAY, weekdayencoded};
-    status += i2c_master_transmit(dev_handle, weekdaybuffer, sizeof(weekdaybuffer), -1);
+esp_err_t set_rtc_date_from_bt(uint8_t year, uint8_t month, uint8_t date, uint8_t weekday, uint8_t hour, uint8_t minute, uint8_t second) {
+    set_rtc_register(REG_SECONDS, 0x00);//Stops the rtc from counting.
+    set_rtc_register(REG_CONTROL, 0x00);//Stops the rtc from counting using the external oscillator. 
+    esp_err_t status = ESP_OK;
 
+    status += set_rtc_year(year);
+    status += set_rtc_month(month, year);
+    status += set_rtc_date(date);
+    status += set_rtc_weekday(weekday);
     status += set_rtc_hour_mode24(hour);
-
     status += set_rtc_minutes(minute);
-
     status += set_rtc_register(REG_CONTROL, 0x48);
     status += set_rtc_seconds(second);
+    
     return status;
 }
 
