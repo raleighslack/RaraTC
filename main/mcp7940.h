@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "esp_mac.h"
+#include "freertos/FreeRTOS.h"
 #include "driver/i2c_master.h"
 
 
@@ -16,6 +17,8 @@
 #define REG_MONTH           0x05
 #define REG_YEAR            0x06
 #define REG_CONTROL         0x07
+#define REG_OSCTRIM         0x08
+
 #define SCL_PIN             6
 #define SDA_PIN             7
 #define I2C_PORT_NUM        0
@@ -49,9 +52,14 @@ uint8_t get_rtc_month();
 uint8_t get_rtc_year();
 uint8_t get_rtc_register(uint8_t REG);
 //Setters
+esp_err_t set_rtc_date_from_bt(uint8_t year, uint8_t month, uint8_t date, uint8_t weekday, uint8_t hour, uint8_t minute, uint8_t second);
 esp_err_t set_rtc_seconds(uint8_t seconds);
-esp_err_t set_rtc_hour_mode24(uint8_t HOUR);
-esp_err_t set_rtc_hour_mode12(uint8_t AM_OR_PM, uint8_t HOUR);
+esp_err_t set_rtc_minutes(uint8_t minutes);
+esp_err_t set_rtc_hour_mode24(uint8_t hour);
+esp_err_t set_rtc_weekday(uint8_t weekday);
+esp_err_t set_rtc_date(uint8_t date);
+esp_err_t set_rtc_month(uint8_t month);
+esp_err_t set_rtc_year(uint8_t year); //without the 20
 esp_err_t set_rtc_register(uint8_t REG, uint8_t DATA);
 
 #ifdef __cplusplus

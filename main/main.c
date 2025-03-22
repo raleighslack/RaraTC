@@ -25,9 +25,11 @@ const float period_us = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*1000000;
 const int64_t half_period_us = period_us/2;
 const float frame_period_us = ((float)1/LTC_FRAMERATE) * 1000000;
 
+bool timerIsRunning = false;
 simple_frame current_simple_frame;
 ltc_frame current_frame;
 uint8_t current_bits[10];
+esp_timer_handle_t periodic_timecode;
 bool state = true;
 volatile int bit_index = 0;                                                                      //value from 0-79, the current transmitting bit
 volatile int bit_local_counter = 0;                                                              //value either 0 or 1, either first half of period or 2nd half
@@ -45,34 +47,29 @@ static void gpio_task(void* arg) {
                 uint8_t hours = get_rtc_hours();
                 uint8_t minutes = get_rtc_minutes();
                 uint8_t seconds = get_rtc_seconds();
+
                 int timeSinceTenSecs = ((hours * 60 * 60) + (minutes * 60) + seconds) - 10;
                 ESP_LOGI(TAG, "RTC ISR: %d:%d:%d, TIME SINCE 10secs: %d", hours, minutes, seconds, timeSinceTenSecs);
+
+                if (timerIsRunning) { //Makes sure the timer is not running, in case of updating the rtc inbetween frames
+                    ESP_ERROR_CHECK(esp_timer_stop(periodic_timecode));
+                }
+
+                current_simple_frame.frame = 0;
+                current_simple_frame.second = seconds;
+                current_simple_frame.minute = minutes;
+                current_simple_frame.hour = hours;
+
+                ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
+                timerIsRunning = true;
+                vTaskDelay(100);
+                ESP_ERROR_CHECK(esp_timer_stop(periodic_timecode));
+                timerIsRunning = false;
             } else {
                 ESP_LOGI(TAG, "BTN ISR");
             }
         }
     }
-}
-
-void periodic_perframe_callback() {
-    current_simple_frame.frame++;
-    if(current_simple_frame.frame >= LTC_FRAMERATE) {
-        current_simple_frame.frame = 0;
-        current_simple_frame.second++;
-    }
-    if(current_simple_frame.second>59) {
-        current_simple_frame.second = 0;
-        current_simple_frame.minute++;
-    }
-    if(current_simple_frame.minute>59) {
-        current_simple_frame.minute = 0;
-        current_simple_frame.hour++;
-    }
-    if(current_simple_frame.hour>=24) {
-        current_simple_frame.hour = 0;
-    }
-    create_frame_from_timecode(&current_frame, current_simple_frame.frame, current_simple_frame.second, current_simple_frame.minute, current_simple_frame.hour);
-    create_bits_from_frame(current_bits, current_frame);
 }
 
 static void gpio_isr_handler(void* arg)
@@ -98,7 +95,12 @@ void IRAM_ATTR periodic_timecode_callback(void* arg)
     }
     if(bit_index > 79) {
         bit_index = 0;
-        periodic_perframe_callback();
+        current_simple_frame.frame++;
+        if(current_simple_frame.frame >= LTC_FRAMERATE) {
+            current_simple_frame.frame = 0;
+        }
+        create_frame_from_timecode(&current_frame, current_simple_frame.frame, current_simple_frame.second, current_simple_frame.minute, current_simple_frame.hour);
+        create_bits_from_frame(current_bits, current_frame);
     }
 }
 
@@ -132,20 +134,16 @@ void app_main(void)
     current_simple_frame.hour = get_rtc_hours();
     current_simple_frame.minute = get_rtc_minutes();
 
+    const esp_timer_create_args_t periodic_timecode_args = {
+        .callback = &periodic_timecode_callback,
+        /* name is optional, but may help identify the timer when debugging */
+        .name = "periodic_timecode"
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
+
     ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1));
     ESP_ERROR_CHECK(gpio_isr_handler_add(RTC_INPUT_PIN, gpio_isr_handler, (void*) RTC_INPUT_PIN));
     ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_INPUT_PIN, gpio_isr_handler, (void*) BTN_INPUT_PIN));
-
-    const esp_timer_create_args_t periodic_timecode_args = {
-            .callback = &periodic_timecode_callback,
-            /* name is optional, but may help identify the timer when debugging */
-            .name = "periodic_timecode"
-    };
-    esp_timer_handle_t periodic_timecode;
-    ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
-
-    ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
-    // ESP_ERROR_CHECK(esp_timer_stop(periodic_timecode));
 
     gpio_evt_queue = xQueueCreate(10, sizeof(int));
     xTaskCreate(gpio_task, "gpio_task", 2048, NULL, 10, NULL);
