@@ -3,7 +3,11 @@
 #include "esp_mac.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "esp_wifi.h"
+#include "esp_netif.h"
 #include "esp_now.h"
+#include "nvs_flash.h"
+#include "hal/cpu_hal.h"
 #include "driver/gpio.h"
 #include "smpte_timecode.h"
 #include "mcp7940.h"
@@ -15,6 +19,7 @@
 #define RTC_INPUT_PIN       5
 #define LTC_FRAMERATE       24
 #define LTC_BITS_PER_FRAME  80
+#define CLOCK_TICKS_PER_SEC 160000000
 
 #define GPIO_OUTPUT_PIN_SEL ((1ULL<<LTC_OUTPUT_PIN) | (1ULL<<LTC_OUTPUT_PIN))
 #define GPIO_INPUT_PIN_SEL  ((1ULL<<RTC_INPUT_PIN) | (1ULL<<BTN_INPUT_PIN))
@@ -26,8 +31,8 @@ const float period_us = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*1000000;
 const int64_t half_period_us = period_us/2;
 const float frame_period_us = ((float)1/LTC_FRAMERATE) * 1000000;
 
-volatile int frameOffset = 25;
-volatile float timeOffsetMs = 10;
+volatile int frameOffset = 0;
+volatile float timeOffsetMs = 0;
 simple_frame current_simple_frame;
 ltc_frame current_frame;
 uint8_t current_bits[10];
@@ -46,20 +51,31 @@ static void gpio_task(void* arg) {
     while (1) {
         if (xQueueReceive(gpio_evt_queue, &gpio_num, portMAX_DELAY)) {
             if(gpio_num == RTC_INPUT_PIN) {
+                uint64_t start = cpu_hal_get_cycle_count();
                 uint8_t hours = get_rtc_hours();
                 uint8_t minutes = get_rtc_minutes();
                 uint8_t seconds = get_rtc_seconds();
 
                 int timeSinceTenSecs = ((hours * 60 * 60) + (minutes * 60) + seconds) - 10;
 
+                int delayTime = (timeOffsetMs - ((cpu_hal_get_cycle_count() - start)/CLOCK_TICKS_PER_SEC) * 1000) / portTICK_PERIOD_MS;
+                if(delayTime <0) {
+                    delayTime=0;
+                }
+
+                vTaskDelay(delayTime);
+                if (esp_timer_is_active(periodic_timecode)) {
+                    ESP_ERROR_CHECK(esp_timer_stop(periodic_timecode));
+                }
+
                 current_simple_frame.frame = 0 + (frameOffset % LTC_FRAMERATE);
                 current_simple_frame.second = seconds + (frameOffset / LTC_FRAMERATE);
                 current_simple_frame.minute = minutes;
                 current_simple_frame.hour = hours;
 
-                vTaskDelay(timeOffsetMs);
-                if (esp_timer_is_active(periodic_timecode)) {
-                    ESP_ERROR_CHECK(esp_timer_stop(periodic_timecode));
+                if(current_simple_frame.second >= 60) {
+                    current_simple_frame.minute += (current_simple_frame.second / 60);
+                    current_simple_frame.second -= (60 - (current_simple_frame.second % 60));
                 }
 
                 ESP_LOGI(TAG, "TC ISR: %d:%d:%d:%d, TIME SINCE 10secs: %d", current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame, timeSinceTenSecs);
@@ -114,6 +130,22 @@ void print_binary(uint8_t bits[10]) {
     printf("\n");
 }
 
+static void wifi_init(void) {
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_start());
+    // ESP_ERROR_CHECK(esp_wifi_set_channel((uint8_t)WIFI_CHANNEL_14, WIFI_SECOND_CHAN_NONE));
+}
+
+static esp_err_t espnow_init(void) {
+    ESP_ERROR_CHECK(espnow_init());
+}
+
 void app_main(void)
 {
     gpio_config_t io_conf = {};
@@ -152,4 +184,6 @@ void app_main(void)
         ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x48));                           //sets 1hz square wave output, and external clock input in the rtc
         ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));                           //tells the rtc to actually start keeping time
     }
+
+    wifi_init();
 }
