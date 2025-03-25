@@ -7,7 +7,6 @@
 #include "freertos/FreeRTOS.h"
 #include "driver/i2c_master.h"
 
-
 #define MCP7940_I2C         0x6F
 #define REG_SECONDS         0x00
 #define REG_MINUTES         0x01
@@ -28,13 +27,16 @@
 #define AM_INDICATOR        0x00
 #define PM_INDICATOR        0x01
 
-#define DAY_SUNDAY          1
-#define DAY_MONDAY          2
-#define DAY_TUESDAY         3
-#define DAY_WEDNESDAY       4
-#define DAY_THURSDAY        5
-#define DAY_FRIDAY          6
-#define DAY_SATURDAY        7
+enum {
+   DAY_INVALID,
+   DAY_SUNDAY,
+   DAY_MONDAY,
+   DAY_TUESDAY,
+   DAY_WEDNESDAY,
+   DAY_THURSDAY,
+   DAY_FRIDAY,
+   DAY_SATURDAY
+};
 
 #ifdef __cplusplus
 extern "C" {

@@ -9,7 +9,10 @@
 #include "nvs_flash.h"
 #include "hal/cpu_hal.h"
 #include "driver/gpio.h"
+#include "driver/adc.h"
+#include "esp_adc_cal.h"
 #include "smpte_timecode.h"
+#include "communication.h"
 #include "mcp7940.h"
 
 #define USB_WAKE            0
@@ -32,7 +35,7 @@ const int64_t half_period_us = period_us/2;
 const float frame_period_us = ((float)1/LTC_FRAMERATE) * 1000000;
 
 volatile int frameOffset = 0;
-volatile float timeOffsetMs = 0;
+volatile float timeOffsetMs = 1;
 simple_frame current_simple_frame;
 ltc_frame current_frame;
 uint8_t current_bits[10];
@@ -130,22 +133,6 @@ void print_binary(uint8_t bits[10]) {
     printf("\n");
 }
 
-static void wifi_init(void) {
-    ESP_ERROR_CHECK(nvs_flash_init());
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
-    ESP_ERROR_CHECK(esp_wifi_start());
-    // ESP_ERROR_CHECK(esp_wifi_set_channel((uint8_t)WIFI_CHANNEL_14, WIFI_SECOND_CHAN_NONE));
-}
-
-static esp_err_t espnow_init(void) {
-    ESP_ERROR_CHECK(espnow_init());
-}
-
 void app_main(void)
 {
     gpio_config_t io_conf = {};
@@ -186,4 +173,14 @@ void app_main(void)
     }
 
     wifi_init();
+    ESP_ERROR_CHECK(espnow_init());
+
+    adc1_config_width(ADC_WIDTH_BIT_12);
+    adc1_config_channel_atten(ADC1_CHANNEL_1, ADC_ATTEN_DB_12);
+
+    // while(1) {
+    //     int voltage = adc1_get_raw(ADC1_CHANNEL_1);
+    //     ESP_LOGI(TAG, "VOLTAGE: %f", (float)voltage/654);
+    //     vTaskDelay(2000 / portTICK_PERIOD_MS);
+    // }
 }

@@ -58,7 +58,7 @@ uint8_t get_rtc_hours() {
     i2c_master_transmit_receive(dev_handle, &register_sec, 1, &data, 1, -1);
     bool isTwelveHourMode = (data & 0b01000000) != 0;
     uint8_t tens;
-    if(isTwelveHourMode) {
+    if(!isTwelveHourMode) {
         tens = (data >> 4) & 0b0011;
     } else {
         tens = (data >> 4) & 0b0001;
