@@ -15,6 +15,15 @@
 #include "esp_netif.h"
 #include "esp_now.h"
 #include "nvs_flash.h"
+/* NimBLE stack APIs */
+#include "host/ble_hs.h"
+#include "host/ble_uuid.h"
+#include "host/util/util.h"
+#include "nimble/ble.h"
+#include "nimble/nimble_port.h"
+#include "nimble/nimble_port_freertos.h"
+#include "host/ble_gap.h"
+#include "services/gap/ble_svc_gap.h"
 
 #define CONFIG_ESPNOW_CHANNEL       1
 #define CONFIG_ESPNOW_LMK           "lmk1234567890123"
@@ -26,6 +35,10 @@
 #define CONFIG_ESPNOW_SEND_COUNT    100
 #define CONFIG_ESPNOW_SEND_DELAY    1000
 #define CONFIG_ESPNOW_SEND_LEN      10
+
+#define SERVICE_UUID                "4d643a89-695d-43d5-bf1c-b7f4cba32168"
+
+#define DEVICE_NAME                 "RaraTC"
 
 #define IS_BROADCAST_ADDR(addr) (memcmp(addr, s_example_broadcast_mac, ESP_NOW_ETH_ALEN) == 0)
 
@@ -89,6 +102,7 @@ typedef struct {
     uint8_t dest_mac[ESP_NOW_ETH_ALEN];   //MAC address of destination device.
 } example_espnow_send_param_t;
 
+int gap_init();
 void wifi_init(void);
 esp_err_t espnow_init();
 void example_espnow_deinit(example_espnow_send_param_t *send_param);

@@ -172,8 +172,8 @@ void app_main(void)
         ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));                           //tells the rtc to actually start keeping time
     }
 
-    wifi_init();
-    ESP_ERROR_CHECK(espnow_init());
+    // wifi_init();
+    // ESP_ERROR_CHECK(espnow_init());
 
     adc1_config_width(ADC_WIDTH_BIT_12);
     adc1_config_channel_atten(ADC1_CHANNEL_1, ADC_ATTEN_DB_12);
@@ -183,4 +183,6 @@ void app_main(void)
     //     ESP_LOGI(TAG, "VOLTAGE: %f", (float)voltage/654);
     //     vTaskDelay(2000 / portTICK_PERIOD_MS);
     // }
+
+    gap_init();
 }

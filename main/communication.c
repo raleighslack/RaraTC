@@ -7,6 +7,23 @@ static uint16_t s_example_espnow_seq[EXAMPLE_ESPNOW_DATA_MAX] = { 0, 0 };
 
 void example_espnow_deinit(example_espnow_send_param_t *send_param);
 
+int gap_init() {
+        /* Local variables */
+        int rc = 0;
+
+        /* Call NimBLE GAP initialization API */
+        ble_svc_gap_init();
+    
+        /* Set GAP device name */
+        rc = ble_svc_gap_device_name_set(DEVICE_NAME);
+        if (rc != 0) {
+            ESP_LOGE(TAG, "failed to set device name to %s, error code: %d",
+                     DEVICE_NAME, rc);
+            return rc;
+        }
+        return rc;
+};
+
 void wifi_init(void) {
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_netif_init());
