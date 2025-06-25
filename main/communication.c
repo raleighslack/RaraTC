@@ -1,347 +1,117 @@
 #include "communication.h"
 
-static QueueHandle_t s_example_espnow_queue = NULL;
-static const char *TAG = "communication";
-static uint8_t s_example_broadcast_mac[ESP_NOW_ETH_ALEN] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
-static uint16_t s_example_espnow_seq[EXAMPLE_ESPNOW_DATA_MAX] = { 0, 0 };
+char *TAG = "BLE-Server";
+uint8_t ble_addr_type;
+void ble_app_advertise(void);// Write data to ESP32 defined as server
 
-void example_espnow_deinit(example_espnow_send_param_t *send_param);
+static int device_write(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    // printf("Data from the client: %.*s\n", ctxt->om->om_len, ctxt->om->om_data);
 
-int gap_init() {
-        /* Local variables */
-        int rc = 0;
-
-        /* Call NimBLE GAP initialization API */
-        ble_svc_gap_init();
+    char * data = (char *)ctxt->om->om_data;
+    printf("%d\n",strcmp(data, (char *)"LIGHT ON")==0);
+    if (strcmp(data, (char *)"LIGHT ON\0")==0)
+    {
+       printf("LIGHT ON\n");
+    }
+    else if (strcmp(data, (char *)"LIGHT OFF\0")==0)
+    {
+        printf("LIGHT OFF\n");
+    }
+    else if (strcmp(data, (char *)"FAN ON\0")==0)
+    {
+        printf("FAN ON\n");
+    }
+    else if (strcmp(data, (char *)"FAN OFF\0")==0)
+    {
+        printf("FAN OFF\n");
+    }
+    else{
+        printf("Data from the client: %.*s\n", ctxt->om->om_len, ctxt->om->om_data);
+    }
     
-        /* Set GAP device name */
-        rc = ble_svc_gap_device_name_set(DEVICE_NAME);
-        if (rc != 0) {
-            ESP_LOGE(TAG, "failed to set device name to %s, error code: %d",
-                     DEVICE_NAME, rc);
-            return rc;
+    
+    return 0;
+}
+
+// Read data from ESP32 defined as server
+static int device_read(uint16_t con_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
+{
+    os_mbuf_append(ctxt->om, "Data from the server", strlen("Data from the server"));
+    return 0;
+}
+
+// BLE event handling
+static int ble_gap_event(struct ble_gap_event *event, void *arg)
+{
+    switch (event->type)
+    {
+    // Advertise if connected
+    case BLE_GAP_EVENT_CONNECT:
+        ESP_LOGI("GAP", "BLE GAP EVENT CONNECT %s", event->connect.status == 0 ? "OK!" : "FAILED!");
+        if (event->connect.status != 0)
+        {
+            ble_app_advertise();
         }
-        return rc;
-};
-
-void wifi_init(void) {
-    ESP_ERROR_CHECK(nvs_flash_init());
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-    ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
-    ESP_ERROR_CHECK(esp_wifi_set_mode(ESPNOW_WIFI_MODE));
-    ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_ERROR_CHECK(esp_wifi_set_channel((uint8_t)CONFIG_ESPNOW_CHANNEL, WIFI_SECOND_CHAN_NONE));
+        break;
+    // Advertise again after completion of the event
+    case BLE_GAP_EVENT_DISCONNECT:
+        ESP_LOGI("GAP", "BLE GAP EVENT DISCONNECTED");
+        break;
+    case BLE_GAP_EVENT_ADV_COMPLETE:
+        ESP_LOGI("GAP", "BLE GAP EVENT");
+        ble_app_advertise();
+        break;
+    default:
+        break;
+    }
+    return 0;
 }
 
-/* Parse received ESPNOW data. */
-int example_espnow_data_parse(uint8_t *data, uint16_t data_len, uint8_t *state, uint16_t *seq, uint32_t *magic)
+// Define the BLE connection
+void ble_app_advertise(void)
 {
-    example_espnow_data_t *buf = (example_espnow_data_t *)data;
-    uint16_t crc, crc_cal = 0;
+    // GAP - device name definition
+    struct ble_hs_adv_fields fields;
+    const char *device_name;
+    memset(&fields, 0, sizeof(fields));
+    device_name = ble_svc_gap_device_name(); // Read the BLE device name
+    fields.name = (uint8_t *)device_name;
+    fields.name_len = strlen(device_name);
+    fields.name_is_complete = 1;
+    ble_gap_adv_set_fields(&fields);
 
-    if (data_len < sizeof(example_espnow_data_t)) {
-        ESP_LOGE(TAG, "Receive ESPNOW data too short, len:%d", data_len);
-        return -1;
-    }
-
-    *state = buf->state;
-    *seq = buf->seq_num;
-    *magic = buf->magic;
-    crc = buf->crc;
-    buf->crc = 0;
-    crc_cal = esp_crc16_le(UINT16_MAX, (uint8_t const *)buf, data_len);
-
-    if (crc_cal == crc) {
-        return buf->type;
-    }
-
-    return -1;
+    // GAP - device connectivity definition
+    struct ble_gap_adv_params adv_params;
+    memset(&adv_params, 0, sizeof(adv_params));
+    adv_params.conn_mode = BLE_GAP_CONN_MODE_UND; // connectable or non-connectable
+    adv_params.disc_mode = BLE_GAP_DISC_MODE_GEN; // discoverable or non-discoverable
+    ble_gap_adv_start(ble_addr_type, NULL, BLE_HS_FOREVER, &adv_params, ble_gap_event, NULL);
 }
 
-/* Prepare ESPNOW data to be sent. */
-void example_espnow_data_prepare(example_espnow_send_param_t *send_param)
+// The application
+void ble_app_on_sync(void)
 {
-    example_espnow_data_t *buf = (example_espnow_data_t *)send_param->buffer;
-
-    assert(send_param->len >= sizeof(example_espnow_data_t));
-
-    buf->type = IS_BROADCAST_ADDR(send_param->dest_mac) ? EXAMPLE_ESPNOW_DATA_BROADCAST : EXAMPLE_ESPNOW_DATA_UNICAST;
-    buf->state = send_param->state;
-    buf->seq_num = s_example_espnow_seq[buf->type]++;
-    buf->crc = 0;
-    buf->magic = send_param->magic;
-    /* Fill all remaining bytes after the data with random values */
-    esp_fill_random(buf->payload, send_param->len - sizeof(example_espnow_data_t));
-    buf->crc = esp_crc16_le(UINT16_MAX, (uint8_t const *)buf, send_param->len);
+    ble_hs_id_infer_auto(0, &ble_addr_type); // Determines the best address type automatically
+    ble_app_advertise();                     // Define the BLE connection
 }
 
-void example_espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status)
+// The infinite task
+void host_task(void *param)
 {
-    example_espnow_event_t evt;
-    example_espnow_event_send_cb_t *send_cb = &evt.info.send_cb;
-
-    if (mac_addr == NULL) {
-        ESP_LOGE(TAG, "Send cb arg error");
-        return;
-    }
-
-    evt.id = EXAMPLE_ESPNOW_SEND_CB;
-    memcpy(send_cb->mac_addr, mac_addr, ESP_NOW_ETH_ALEN);
-    send_cb->status = status;
-    if (xQueueSend(s_example_espnow_queue, &evt, ESPNOW_MAXDELAY) != pdTRUE) {
-        ESP_LOGW(TAG, "Send send queue fail");
-    }
+    nimble_port_run(); // This function will return only when nimble_port_stop() is executed
 }
 
-void example_espnow_recv_cb(const esp_now_recv_info_t *recv_info, const uint8_t *data, int len)
+void example_func()
 {
-    example_espnow_event_t evt;
-    example_espnow_event_recv_cb_t *recv_cb = &evt.info.recv_cb;
-    uint8_t * mac_addr = recv_info->src_addr;
-    uint8_t * des_addr = recv_info->des_addr;
-
-    if (mac_addr == NULL || data == NULL || len <= 0) {
-        ESP_LOGE(TAG, "Receive cb arg error");
-        return;
-    }
-
-    if (IS_BROADCAST_ADDR(des_addr)) {
-        /* If added a peer with encryption before, the receive packets may be
-         * encrypted as peer-to-peer message or unencrypted over the broadcast channel.
-         * Users can check the destination address to distinguish it.
-         */
-        ESP_LOGD(TAG, "Receive broadcast ESPNOW data");
-    } else {
-        ESP_LOGD(TAG, "Receive unicast ESPNOW data");
-    }
-
-    evt.id = EXAMPLE_ESPNOW_RECV_CB;
-    memcpy(recv_cb->mac_addr, mac_addr, ESP_NOW_ETH_ALEN);
-    recv_cb->data = malloc(len);
-    if (recv_cb->data == NULL) {
-        ESP_LOGE(TAG, "Malloc receive data fail");
-        return;
-    }
-    memcpy(recv_cb->data, data, len);
-    recv_cb->data_len = len;
-    if (xQueueSend(s_example_espnow_queue, &evt, ESPNOW_MAXDELAY) != pdTRUE) {
-        ESP_LOGW(TAG, "Send receive queue fail");
-        free(recv_cb->data);
-    }
+    nvs_flash_init();                          // 1 - Initialize NVS flash using
+    // esp_nimble_hci_and_controller_init();      // 2 - Initialize ESP controller
+    nimble_port_init();                        // 3 - Initialize the host stack
+    ble_svc_gap_device_name_set("RSYNC"); // 4 - Initialize NimBLE configuration - server name
+    ble_svc_gap_init();                        // 4 - Initialize NimBLE configuration - gap service
+    ble_svc_gatt_init();                       // 4 - Initialize NimBLE configuration - gatt service
+    ble_gatts_count_cfg(gatt_svcs);            // 4 - Initialize NimBLE configuration - config gatt services
+    ble_gatts_add_svcs(gatt_svcs);             // 4 - Initialize NimBLE configuration - queues gatt services.
+    ble_hs_cfg.sync_cb = ble_app_on_sync;      // 5 - Initialize application
+    nimble_port_freertos_init(host_task);      // 6 - Run the thread
 }
-
-void example_espnow_task(void *pvParameter)
-{
-    example_espnow_event_t evt;
-    uint8_t recv_state = 0;
-    uint16_t recv_seq = 0;
-    uint32_t recv_magic = 0;
-    bool is_broadcast = false;
-    int ret;
-
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
-    ESP_LOGI(TAG, "Start sending broadcast data");
-
-    /* Start sending broadcast ESPNOW data. */
-    example_espnow_send_param_t *send_param = (example_espnow_send_param_t *)pvParameter;
-    if (esp_now_send(send_param->dest_mac, send_param->buffer, send_param->len) != ESP_OK) {
-        ESP_LOGE(TAG, "Send error");
-        example_espnow_deinit(send_param);
-        vTaskDelete(NULL);
-    }
-
-    while (xQueueReceive(s_example_espnow_queue, &evt, portMAX_DELAY) == pdTRUE) {
-        switch (evt.id) {
-            case EXAMPLE_ESPNOW_SEND_CB:
-            {
-                example_espnow_event_send_cb_t *send_cb = &evt.info.send_cb;
-                is_broadcast = IS_BROADCAST_ADDR(send_cb->mac_addr);
-
-                ESP_LOGD(TAG, "Send data to "MACSTR", status1: %d", MAC2STR(send_cb->mac_addr), send_cb->status);
-
-                if (is_broadcast && (send_param->broadcast == false)) {
-                    break;
-                }
-
-                if (!is_broadcast) {
-                    send_param->count--;
-                    if (send_param->count == 0) {
-                        ESP_LOGI(TAG, "Send done");
-                        example_espnow_deinit(send_param);
-                        vTaskDelete(NULL);
-                    }
-                }
-
-                /* Delay a while before sending the next data. */
-                if (send_param->delay > 0) {
-                    vTaskDelay(send_param->delay/portTICK_PERIOD_MS);
-                }
-
-                ESP_LOGI(TAG, "send data to "MACSTR"", MAC2STR(send_cb->mac_addr));
-
-                memcpy(send_param->dest_mac, send_cb->mac_addr, ESP_NOW_ETH_ALEN);
-                example_espnow_data_prepare(send_param);
-
-                /* Send the next data after the previous data is sent. */
-                if (esp_now_send(send_param->dest_mac, send_param->buffer, send_param->len) != ESP_OK) {
-                    ESP_LOGE(TAG, "Send error");
-                    example_espnow_deinit(send_param);
-                    vTaskDelete(NULL);
-                }
-                break;
-            }
-            case EXAMPLE_ESPNOW_RECV_CB:
-            {
-                example_espnow_event_recv_cb_t *recv_cb = &evt.info.recv_cb;
-
-                ret = example_espnow_data_parse(recv_cb->data, recv_cb->data_len, &recv_state, &recv_seq, &recv_magic);
-                free(recv_cb->data);
-                if (ret == EXAMPLE_ESPNOW_DATA_BROADCAST) {
-                    ESP_LOGI(TAG, "Receive %dth broadcast data from: "MACSTR", len: %d", recv_seq, MAC2STR(recv_cb->mac_addr), recv_cb->data_len);
-
-                    /* If MAC address does not exist in peer list, add it to peer list. */
-                    if (esp_now_is_peer_exist(recv_cb->mac_addr) == false) {
-                        esp_now_peer_info_t *peer = malloc(sizeof(esp_now_peer_info_t));
-                        if (peer == NULL) {
-                            ESP_LOGE(TAG, "Malloc peer information fail");
-                            example_espnow_deinit(send_param);
-                            vTaskDelete(NULL);
-                        }
-                        memset(peer, 0, sizeof(esp_now_peer_info_t));
-                        peer->channel = CONFIG_ESPNOW_CHANNEL;
-                        peer->ifidx = ESPNOW_WIFI_IF;
-                        peer->encrypt = true;
-                        memcpy(peer->lmk, CONFIG_ESPNOW_LMK, ESP_NOW_KEY_LEN);
-                        memcpy(peer->peer_addr, recv_cb->mac_addr, ESP_NOW_ETH_ALEN);
-                        ESP_ERROR_CHECK( esp_now_add_peer(peer) );
-                        free(peer);
-                    }
-
-                    /* Indicates that the device has received broadcast ESPNOW data. */
-                    if (send_param->state == 0) {
-                        send_param->state = 1;
-                    }
-
-                    /* If receive broadcast ESPNOW data which indicates that the other device has received
-                     * broadcast ESPNOW data and the local magic number is bigger than that in the received
-                     * broadcast ESPNOW data, stop sending broadcast ESPNOW data and start sending unicast
-                     * ESPNOW data.
-                     */
-                    if (recv_state == 1) {
-                        /* The device which has the bigger magic number sends ESPNOW data, the other one
-                         * receives ESPNOW data.
-                         */
-                        if (send_param->unicast == false && send_param->magic >= recv_magic) {
-                    	    ESP_LOGI(TAG, "Start sending unicast data");
-                    	    ESP_LOGI(TAG, "send data to "MACSTR"", MAC2STR(recv_cb->mac_addr));
-
-                    	    /* Start sending unicast ESPNOW data. */
-                            memcpy(send_param->dest_mac, recv_cb->mac_addr, ESP_NOW_ETH_ALEN);
-                            example_espnow_data_prepare(send_param);
-                            if (esp_now_send(send_param->dest_mac, send_param->buffer, send_param->len) != ESP_OK) {
-                                ESP_LOGE(TAG, "Send error");
-                                example_espnow_deinit(send_param);
-                                vTaskDelete(NULL);
-                            }
-                            else {
-                                send_param->broadcast = false;
-                                send_param->unicast = true;
-                            }
-                        }
-                    }
-                }
-                else if (ret == EXAMPLE_ESPNOW_DATA_UNICAST) {
-                    ESP_LOGI(TAG, "Receive %dth unicast data from: "MACSTR", len: %d", recv_seq, MAC2STR(recv_cb->mac_addr), recv_cb->data_len);
-
-                    /* If receive unicast ESPNOW data, also stop sending broadcast ESPNOW data. */
-                    send_param->broadcast = false;
-                }
-                else {
-                    ESP_LOGI(TAG, "Receive error data from: "MACSTR"", MAC2STR(recv_cb->mac_addr));
-                }
-                break;
-            }
-            default:
-                ESP_LOGE(TAG, "Callback type error: %d", evt.id);
-                break;
-        }
-    }
-}
-
-esp_err_t espnow_init() {
-    example_espnow_send_param_t *send_param;
-
-    s_example_espnow_queue = xQueueCreate(ESPNOW_QUEUE_SIZE, sizeof(example_espnow_event_t));
-    if (s_example_espnow_queue == NULL) {
-        ESP_LOGE(TAG, "Create queue fail");
-        return ESP_FAIL;
-    }
-
-    ESP_ERROR_CHECK(esp_now_init());
-    ESP_ERROR_CHECK(esp_now_register_recv_cb(example_espnow_recv_cb));
-    ESP_ERROR_CHECK(esp_now_register_send_cb(example_espnow_send_cb));
-    ESP_ERROR_CHECK(esp_now_set_pmk((uint8_t *)CONFIG_ESPNOW_PMK));
-
-    /* Add broadcast peer information to peer list. */
-    esp_now_peer_info_t *peer = malloc(sizeof(esp_now_peer_info_t));
-    if (peer == NULL) {
-        ESP_LOGE(TAG, "Malloc peer information fail");
-        vQueueDelete(s_example_espnow_queue);
-        s_example_espnow_queue = NULL;
-        esp_now_deinit();
-        return ESP_FAIL;
-    }
-    memset(peer, 0, sizeof(esp_now_peer_info_t));
-    peer->channel = CONFIG_ESPNOW_CHANNEL;
-    peer->ifidx = ESPNOW_WIFI_IF;
-    peer->encrypt = false;
-    memcpy(peer->peer_addr, s_example_broadcast_mac, ESP_NOW_ETH_ALEN);
-    ESP_ERROR_CHECK( esp_now_add_peer(peer) );
-    free(peer);
-
-    /* Initialize sending parameters. */
-    send_param = malloc(sizeof(example_espnow_send_param_t));
-    if (send_param == NULL) {
-        ESP_LOGE(TAG, "Malloc send parameter fail");
-        vQueueDelete(s_example_espnow_queue);
-        s_example_espnow_queue = NULL;
-        esp_now_deinit();
-        return ESP_FAIL;
-    }
-    memset(send_param, 0, sizeof(example_espnow_send_param_t));
-    send_param->unicast = false;
-    send_param->broadcast = true;
-    send_param->state = 0;
-    send_param->magic = esp_random();
-    send_param->count = CONFIG_ESPNOW_SEND_COUNT;
-    send_param->delay = CONFIG_ESPNOW_SEND_DELAY;
-    send_param->len = CONFIG_ESPNOW_SEND_LEN;
-    send_param->buffer = malloc(CONFIG_ESPNOW_SEND_LEN);
-    if (send_param->buffer == NULL) {
-        ESP_LOGE(TAG, "Malloc send buffer fail");
-        free(send_param);
-        vQueueDelete(s_example_espnow_queue);
-        s_example_espnow_queue = NULL;
-        esp_now_deinit();
-        return ESP_FAIL;
-    }
-    memcpy(send_param->dest_mac, s_example_broadcast_mac, ESP_NOW_ETH_ALEN);
-    example_espnow_data_prepare(send_param);
-
-    xTaskCreate(example_espnow_task, "example_espnow_task", 2048, send_param, 4, NULL);
-
-    return ESP_OK;
-}
-
-void example_espnow_deinit(example_espnow_send_param_t *send_param)
-{
-    free(send_param->buffer);
-    free(send_param);
-    vQueueDelete(s_example_espnow_queue);
-    s_example_espnow_queue = NULL;
-    esp_now_deinit();
-}
-

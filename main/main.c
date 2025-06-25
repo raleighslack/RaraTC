@@ -181,8 +181,10 @@ void app_main(void)
     // while(1) {
     //     int voltage = adc1_get_raw(ADC1_CHANNEL_1);
     //     ESP_LOGI(TAG, "VOLTAGE: %f", (float)voltage/654);
-    //     vTaskDelay(2000 / portTICK_PERIOD_MS);
+    //     vTaskDelay(10000 / portTICK_PERIOD_MS);
     // }
 
-    gap_init();
+    // int wadwd = gap_init();
+
+    example_func();
 }
