@@ -25,10 +25,12 @@
 #define CLOCK_TICKS_PER_SEC 160000000
 
 #define GPIO_OUTPUT_PIN_SEL ((1ULL<<LTC_OUTPUT_PIN) | (1ULL<<LTC_OUTPUT_PIN))
-#define GPIO_INPUT_PIN_SEL  ((1ULL<<RTC_INPUT_PIN) | (1ULL<<BTN_INPUT_PIN))
+#define GPIO_INPUT_RTC_PIN_SEL  ((1ULL<<RTC_INPUT_PIN) | (1ULL<<RTC_INPUT_PIN))
+#define GPIO_INPUT_BTN_PIN_SEL  ((1ULL<<BTN_INPUT_PIN) | (1ULL<<BTN_INPUT_PIN))
 
 static const char *TAG = "main";
-static QueueHandle_t gpio_evt_queue;
+static QueueHandle_t rtc_evt_queue;
+static QueueHandle_t btn_evt_queue;
 
 const float period_us = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*1000000;
 const int64_t half_period_us = period_us/2;
@@ -43,16 +45,26 @@ esp_timer_handle_t periodic_timecode;
 bool state = true;
 volatile int bit_index = 0;                                                                      //value from 0-79, the current transmitting bit
 volatile int bit_local_counter = 0;                                                              //value either 0 or 1, either first half of period or 2nd half
+esp_adc_cal_characteristics_t *adc_characas;
 
 bool get_bit(uint8_t value, uint8_t index) {
     if (index > 7) return false;                                                        // Ensure index is within bounds
     return (value >> index) & 1;
 }
 
-static void gpio_task(void* arg) {
+static void btn_task(void* arg) {
+    int gpio_num;
+    while(1) {
+        if (xQueueReceive(btn_evt_queue, &gpio_num, portMAX_DELAY)) {
+            ESP_LOGI(TAG, "BTN ISR");
+        }
+    }
+}
+
+static void rtc_task(void* arg) {
     int gpio_num;
     while (1) {
-        if (xQueueReceive(gpio_evt_queue, &gpio_num, portMAX_DELAY)) {
+        if (xQueueReceive(rtc_evt_queue, &gpio_num, portMAX_DELAY)) {
             if(gpio_num == RTC_INPUT_PIN) {
                 uint64_t start = cpu_hal_get_cycle_count();
                 uint8_t hours = get_rtc_hours();
@@ -91,10 +103,15 @@ static void gpio_task(void* arg) {
     }
 }
 
-static void gpio_isr_handler(void* arg)
+static void rtc_isr_handler(void* arg)
 {
     int gpio_num = (int) arg;
-    xQueueSendFromISR(gpio_evt_queue, &gpio_num, NULL);
+    xQueueSendFromISR(rtc_evt_queue, &gpio_num, NULL);
+}
+
+static void btn_isr_handler(void* arg) {
+    int gpio_num = (int) arg;
+    xQueueSendFromISR(btn_evt_queue, &gpio_num, NULL);
 }
 
 void IRAM_ATTR periodic_timecode_callback(void* arg)
@@ -143,9 +160,13 @@ void app_main(void)
 
     io_conf.intr_type = GPIO_INTR_POSEDGE;
     io_conf.mode = GPIO_MODE_INPUT;
-    io_conf.pin_bit_mask = GPIO_INPUT_PIN_SEL;
+    io_conf.pin_bit_mask = GPIO_INPUT_RTC_PIN_SEL;
     io_conf.pull_up_en = false;
     io_conf.pull_down_en = false;
+    gpio_config(&io_conf);
+
+    io_conf.intr_type = GPIO_INTR_ANYEDGE;
+    io_conf.pin_bit_mask = GPIO_INPUT_BTN_PIN_SEL;
     gpio_config(&io_conf);
     
     ESP_ERROR_CHECK(init_rtc());                                                        //Initializes the RTC
@@ -161,30 +182,34 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
 
     ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1));
-    ESP_ERROR_CHECK(gpio_isr_handler_add(RTC_INPUT_PIN, gpio_isr_handler, (void*) RTC_INPUT_PIN));
-    ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_INPUT_PIN, gpio_isr_handler, (void*) BTN_INPUT_PIN));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(RTC_INPUT_PIN, rtc_isr_handler, (void*) RTC_INPUT_PIN));
+    ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_INPUT_PIN, btn_isr_handler, (void*) BTN_INPUT_PIN));
 
-    gpio_evt_queue = xQueueCreate(10, sizeof(int));
-    xTaskCreate(gpio_task, "gpio_task", 2048, NULL, 10, NULL);
+    rtc_evt_queue = xQueueCreate(10, sizeof(int));
+    xTaskCreate(rtc_task, "rtc_task", 2048, NULL, 10, NULL);
+
+    btn_evt_queue = xQueueCreate(10, sizeof(int));
+    xTaskCreate(btn_task, "btn_task", 2048, NULL, 10, NULL);
 
     if((get_rtc_register(REG_SECONDS) | 127) != 0xFF) {
         ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x48));                           //sets 1hz square wave output, and external clock input in the rtc
         ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));                           //tells the rtc to actually start keeping time
     }
 
-    // wifi_init();
-    // ESP_ERROR_CHECK(espnow_init());
+    static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
+    static const adc1_channel_t adc_channel = ADC_CHANNEL_1;
+    adc1_config_width(width);
+    adc1_config_channel_atten(adc_channel, ADC_ATTEN_DB_12);
 
-    adc1_config_width(ADC_WIDTH_BIT_12);
-    adc1_config_channel_atten(ADC1_CHANNEL_1, ADC_ATTEN_DB_12);
+    adc_characas = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
+    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_12, width, 1100, adc_characas);
 
     // while(1) {
-    //     int voltage = adc1_get_raw(ADC1_CHANNEL_1);
-    //     ESP_LOGI(TAG, "VOLTAGE: %f", (float)voltage/654);
+    //     int raw = adc1_get_raw(ADC1_CHANNEL_1);
+    //     int voltage = esp_adc_cal_raw_to_voltage(raw, adc_characas);
+    //     ESP_LOGI(TAG, "VOLTAGE: %d", voltage);
     //     vTaskDelay(10000 / portTICK_PERIOD_MS);
     // }
-
-    // int wadwd = gap_init();
 
     example_func();
 }

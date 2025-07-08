@@ -37,7 +37,7 @@ static int device_write(uint16_t conn_handle, uint16_t attr_handle, struct ble_g
 // Read data from ESP32 defined as server
 static int device_read(uint16_t con_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    os_mbuf_append(ctxt->om, "Data from the server", strlen("Data from the server"));
+    os_mbuf_append(ctxt->om, "1", strlen("1"));
     return 0;
 }
 
@@ -57,6 +57,7 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
     // Advertise again after completion of the event
     case BLE_GAP_EVENT_DISCONNECT:
         ESP_LOGI("GAP", "BLE GAP EVENT DISCONNECTED");
+        // ble_app_advertise();
         break;
     case BLE_GAP_EVENT_ADV_COMPLETE:
         ESP_LOGI("GAP", "BLE GAP EVENT");
