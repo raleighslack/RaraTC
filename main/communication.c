@@ -116,3 +116,9 @@ void example_func()
     ble_hs_cfg.sync_cb = ble_app_on_sync;      // 5 - Initialize application
     nimble_port_freertos_init(host_task);      // 6 - Run the thread
 }
+
+void ble_deinit(void)
+{
+    nimble_port_deinit();
+    nvs_flash_deinit();
+}

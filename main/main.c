@@ -14,6 +14,8 @@
 #include "smpte_timecode.h"
 #include "communication.h"
 #include "mcp7940.h"
+#include "time.h"
+#include "esp_sleep.h"
 
 #define USB_WAKE            0
 #define LIPO_VOLTAGE        1
@@ -43,8 +45,8 @@ ltc_frame current_frame;
 uint8_t current_bits[10];
 esp_timer_handle_t periodic_timecode;
 bool state = true;
-volatile int bit_index = 0;                                                                      //value from 0-79, the current transmitting bit
-volatile int bit_local_counter = 0;                                                              //value either 0 or 1, either first half of period or 2nd half
+volatile int bit_index = 0;                                                             //value from 0-79, the current transmitting bit
+volatile int bit_local_counter = 0;                                                     //value either 0 or 1, either first half of period or 2nd half
 esp_adc_cal_characteristics_t *adc_characas;
 
 bool get_bit(uint8_t value, uint8_t index) {
@@ -54,9 +56,22 @@ bool get_bit(uint8_t value, uint8_t index) {
 
 static void btn_task(void* arg) {
     int gpio_num;
+    uint64_t prev_time = 0;
+    bool is_down = false;
     while(1) {
         if (xQueueReceive(btn_evt_queue, &gpio_num, portMAX_DELAY)) {
-            ESP_LOGI(TAG, "BTN ISR");
+            uint64_t current_time = esp_timer_get_time();
+            uint64_t time_difference = current_time - prev_time;
+            if (time_difference > 50000) {
+                is_down = !is_down;
+                float diff_helps = (float)(time_difference/1000000.0);
+                ESP_LOGI(TAG, "BTN ISR, DIFFERENCE: %f, ISDOWN?: %d", diff_helps, is_down);
+                prev_time = current_time;
+                if((time_difference >= 5000000) && !is_down) {
+                    ble_deinit();
+                    esp_deep_sleep_start();
+                }
+            }
         }
     }
 }
@@ -182,6 +197,7 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
 
     ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1));
+    ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT(BTN_INPUT_PIN), ESP_GPIO_WAKEUP_GPIO_HIGH));
     ESP_ERROR_CHECK(gpio_isr_handler_add(RTC_INPUT_PIN, rtc_isr_handler, (void*) RTC_INPUT_PIN));
     ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_INPUT_PIN, btn_isr_handler, (void*) BTN_INPUT_PIN));
 
