@@ -54,6 +54,15 @@ bool get_bit(uint8_t value, uint8_t index) {
     return (value >> index) & 1;
 }
 
+static void lipo_task(void* arg) {
+    while(1) {
+        int raw = adc1_get_raw(ADC1_CHANNEL_1);
+        int voltage = esp_adc_cal_raw_to_voltage(raw, adc_characas);
+        ESP_LOGI(TAG, "VOLTAGE: %d", voltage);
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
+    }
+}
+
 static void btn_task(void* arg) {
     int gpio_num;
     uint64_t prev_time = 0;
@@ -69,6 +78,7 @@ static void btn_task(void* arg) {
                 prev_time = current_time;
                 if((time_difference >= 5000000) && !is_down) {
                     ble_deinit();
+                    vTaskDelete(xTaskGetHandle("lipo_task"));
                     esp_deep_sleep_start();
                 }
             }
@@ -220,12 +230,7 @@ void app_main(void)
     adc_characas = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
     esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_12, width, 1100, adc_characas);
 
-    // while(1) {
-    //     int raw = adc1_get_raw(ADC1_CHANNEL_1);
-    //     int voltage = esp_adc_cal_raw_to_voltage(raw, adc_characas);
-    //     ESP_LOGI(TAG, "VOLTAGE: %d", voltage);
-    //     vTaskDelay(10000 / portTICK_PERIOD_MS);
-    // }
+    xTaskCreate(lipo_task, "lipo_task", 2048, NULL, 10, NULL);
 
     example_func();
 }
