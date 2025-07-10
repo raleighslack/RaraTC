@@ -9,11 +9,10 @@
 #include "nvs_flash.h"
 #include "hal/cpu_hal.h"
 #include "driver/gpio.h"
-#include "driver/adc.h"
-#include "esp_adc_cal.h"
 #include "smpte_timecode.h"
 #include "communication.h"
 #include "mcp7940.h"
+#include "lipo.h"
 #include "time.h"
 #include "esp_sleep.h"
 
@@ -47,7 +46,6 @@ esp_timer_handle_t periodic_timecode;
 bool state = true;
 volatile int bit_index = 0;                                                             //value from 0-79, the current transmitting bit
 volatile int bit_local_counter = 0;                                                     //value either 0 or 1, either first half of period or 2nd half
-esp_adc_cal_characteristics_t *adc_characas;
 
 bool get_bit(uint8_t value, uint8_t index) {
     if (index > 7) return false;                                                        // Ensure index is within bounds
@@ -56,9 +54,8 @@ bool get_bit(uint8_t value, uint8_t index) {
 
 static void lipo_task(void* arg) {
     while(1) {
-        int raw = adc1_get_raw(ADC1_CHANNEL_1);
-        int voltage = esp_adc_cal_raw_to_voltage(raw, adc_characas);
-        ESP_LOGI(TAG, "VOLTAGE: %d", voltage);
+        float voltage = get_lipo_voltage();
+        ESP_LOGI(TAG, "VOLTAGE: %f", voltage);
         vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
 }
@@ -95,6 +92,7 @@ static void rtc_task(void* arg) {
                 uint8_t hours = get_rtc_hours();
                 uint8_t minutes = get_rtc_minutes();
                 uint8_t seconds = get_rtc_seconds();
+                uint8_t days = get_rtc_date();
 
                 int timeSinceTenSecs = ((hours * 60 * 60) + (minutes * 60) + seconds) - 10;
 
@@ -118,7 +116,7 @@ static void rtc_task(void* arg) {
                     current_simple_frame.second -= (60 - (current_simple_frame.second % 60));
                 }
 
-                ESP_LOGI(TAG, "TC ISR: %d:%d:%d:%d, TIME SINCE 10secs: %d", current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame, timeSinceTenSecs);
+                ESP_LOGI(TAG, "DAY: %d, TC ISR: %d:%d:%d:%d, TIME SINCE 10secs: %d", days, current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame, timeSinceTenSecs);
 
                 ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
             } else {
@@ -195,6 +193,8 @@ void app_main(void)
     gpio_config(&io_conf);
     
     ESP_ERROR_CHECK(init_rtc());                                                        //Initializes the RTC
+    
+    init_lipo();
 
     current_simple_frame.hour = get_rtc_hours();
     current_simple_frame.minute = get_rtc_minutes();
@@ -221,16 +221,6 @@ void app_main(void)
         ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x48));                           //sets 1hz square wave output, and external clock input in the rtc
         ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));                           //tells the rtc to actually start keeping time
     }
-
-    static const adc_bits_width_t width = ADC_WIDTH_BIT_12;
-    static const adc1_channel_t adc_channel = ADC_CHANNEL_1;
-    adc1_config_width(width);
-    adc1_config_channel_atten(adc_channel, ADC_ATTEN_DB_12);
-
-    adc_characas = (esp_adc_cal_characteristics_t *)calloc(1, sizeof(esp_adc_cal_characteristics_t));
-    esp_adc_cal_characterize(ADC_UNIT_1, ADC_ATTEN_DB_12, width, 1100, adc_characas);
-
-    xTaskCreate(lipo_task, "lipo_task", 2048, NULL, 10, NULL);
 
     example_func();
 }

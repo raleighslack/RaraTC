@@ -14,10 +14,12 @@
 #include "services/gap/ble_svc_gap.h"
 #include "services/gatt/ble_svc_gatt.h"
 #include "sdkconfig.h"
+#include "lipo.h"
 
 void ble_app_advertise(void);
 static int device_write(uint16_t conn_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg);
 static int device_read(uint16_t con_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg);
+static int lipo_ble_read(uint16_t con_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg);
 static int ble_gap_event(struct ble_gap_event *event, void *arg);
 void ble_app_advertise(void);
 void ble_app_on_sync(void);
@@ -33,6 +35,9 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
          {.uuid = BLE_UUID16_DECLARE(0xFEF4),           // Define UUID for reading
           .flags = BLE_GATT_CHR_F_READ,
           .access_cb = device_read},
+          {.uuid = BLE_UUID16_DECLARE(0xBEBE),           // Define UUID for reading
+          .flags = BLE_GATT_CHR_F_READ,
+          .access_cb = lipo_ble_read},
          {.uuid = BLE_UUID16_DECLARE(0xDEAD),           // Define UUID for writing
           .flags = BLE_GATT_CHR_F_WRITE,
           .access_cb = device_write},
