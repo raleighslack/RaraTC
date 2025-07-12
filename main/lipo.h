@@ -7,4 +7,4 @@
 #include "driver/adc.h"
 
 float get_lipo_voltage();
-void init_lipo();
+esp_err_t init_lipo();

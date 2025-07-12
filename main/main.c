@@ -6,7 +6,6 @@
 #include "esp_wifi.h"
 #include "esp_netif.h"
 #include "esp_now.h"
-#include "nvs_flash.h"
 #include "hal/cpu_hal.h"
 #include "driver/gpio.h"
 #include "smpte_timecode.h"
@@ -15,6 +14,8 @@
 #include "lipo.h"
 #include "time.h"
 #include "esp_sleep.h"
+#include "nvs.h"
+#include "mbedtls/base64.h"
 
 #define USB_WAKE            0
 #define LIPO_VOLTAGE        1
@@ -46,6 +47,7 @@ esp_timer_handle_t periodic_timecode;
 bool state = true;
 volatile int bit_index = 0;                                                             //value from 0-79, the current transmitting bit
 volatile int bit_local_counter = 0;                                                     //value either 0 or 1, either first half of period or 2nd half
+static const char* BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 bool get_bit(uint8_t value, uint8_t index) {
     if (index > 7) return false;                                                        // Ensure index is within bounds
@@ -74,7 +76,7 @@ static void btn_task(void* arg) {
                 ESP_LOGI(TAG, "BTN ISR, DIFFERENCE: %f, ISDOWN?: %d", diff_helps, is_down);
                 prev_time = current_time;
                 if((time_difference >= 5000000) && !is_down) {
-                    ble_deinit();
+                    ESP_ERROR_CHECK(ble_deinit());
                     vTaskDelete(xTaskGetHandle("lipo_task"));
                     esp_deep_sleep_start();
                 }
@@ -173,6 +175,24 @@ void print_binary(uint8_t bits[10]) {
     printf("\n");
 }
 
+void encode_base58(uint64_t value, char *output, size_t output_size) {
+    char buffer[16]; // max 11 chars for 64-bit + null
+    int i = 0;
+
+    do {
+        buffer[i++] = BASE58_ALPHABET[value % 58];
+        value /= 58;
+    } while (value && i < (int)(sizeof(buffer) - 1));
+
+    buffer[i] = '\0';
+
+    // Reverse the string into output
+    for (int j = 0; j < i; ++j) {
+        output[j] = buffer[i - j - 1];
+    }
+    output[i] = '\0';
+}
+
 void app_main(void)
 {
     gpio_config_t io_conf = {};
@@ -192,9 +212,9 @@ void app_main(void)
     io_conf.pin_bit_mask = GPIO_INPUT_BTN_PIN_SEL;
     gpio_config(&io_conf);
     
-    ESP_ERROR_CHECK(init_rtc());                                                        //Initializes the RTC
-    
-    init_lipo();
+    ESP_ERROR_CHECK(init_rtc());
+    ESP_ERROR_CHECK(init_lipo());
+    ESP_ERROR_CHECK(nvs_rara_init());
 
     current_simple_frame.hour = get_rtc_hours();
     current_simple_frame.minute = get_rtc_minutes();
@@ -216,11 +236,19 @@ void app_main(void)
 
     btn_evt_queue = xQueueCreate(10, sizeof(int));
     xTaskCreate(btn_task, "btn_task", 2048, NULL, 10, NULL);
+    xTaskCreate(lipo_task, "lipo_task", 2048, NULL, 10, NULL);
 
     if((get_rtc_register(REG_SECONDS) | 127) != 0xFF) {
         ESP_ERROR_CHECK(set_rtc_register(REG_CONTROL, 0x48));                           //sets 1hz square wave output, and external clock input in the rtc
         ESP_ERROR_CHECK(set_rtc_register(REG_SECONDS, 0x80));                           //tells the rtc to actually start keeping time
     }
 
-    example_func();
+    uint64_t serial_number = get_serial_no();
+    ESP_LOGI(TAG, "%" PRId64 "\n", serial_number);
+    char serial_base58[16];  // Plenty of room (max 11 chars + null)
+    encode_base58(serial_number, serial_base58, sizeof(serial_base58));
+
+    char bt_name[32];
+    snprintf(bt_name, sizeof(bt_name), "RSYNC - %s", serial_base58);
+    bluetooth_main(bt_name);
 }

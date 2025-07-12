@@ -24,7 +24,7 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg);
 void ble_app_advertise(void);
 void ble_app_on_sync(void);
 void host_task(void *param);
-void ble_deinit(void);
+esp_err_t ble_deinit();
 
 // Array of pointers to other service definitions
 // UUID - Universal Unique Identifier
@@ -44,4 +44,4 @@ static const struct ble_gatt_svc_def gatt_svcs[] = {
          {0}}},
     {0}};
 
-void example_func();
+esp_err_t bluetooth_main();

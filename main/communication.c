@@ -112,22 +112,26 @@ void host_task(void *param)
     nimble_port_run(); // This function will return only when nimble_port_stop() is executed
 }
 
-void example_func()
+esp_err_t bluetooth_main(const char* name)
 {
-    nvs_flash_init();                          // 1 - Initialize NVS flash using
-    // esp_nimble_hci_and_controller_init();      // 2 - Initialize ESP controller
-    nimble_port_init();                        // 3 - Initialize the host stack
-    ble_svc_gap_device_name_set("RSYNC"); // 4 - Initialize NimBLE configuration - server name
+    esp_err_t errorState = ESP_OK;
+    // errorState += nvs_flash_init();         // 1 - Initialize NVS flash using
+    // esp_nimble_hci_and_controller_init();   // 2 - Initialize ESP controller
+    errorState = nimble_port_init();           // 3 - Initialize the host stack
+    ble_svc_gap_device_name_set(name);         // 4 - Initialize NimBLE configuration - server name
     ble_svc_gap_init();                        // 4 - Initialize NimBLE configuration - gap service
     ble_svc_gatt_init();                       // 4 - Initialize NimBLE configuration - gatt service
     ble_gatts_count_cfg(gatt_svcs);            // 4 - Initialize NimBLE configuration - config gatt services
     ble_gatts_add_svcs(gatt_svcs);             // 4 - Initialize NimBLE configuration - queues gatt services.
     ble_hs_cfg.sync_cb = ble_app_on_sync;      // 5 - Initialize application
     nimble_port_freertos_init(host_task);      // 6 - Run the thread
+    return errorState;
 }
 
-void ble_deinit(void)
+esp_err_t ble_deinit()
 {
-    nimble_port_deinit();
-    nvs_flash_deinit();
+    esp_err_t errorState = ESP_OK;
+    errorState += nimble_port_deinit();
+    errorState += nvs_flash_deinit();
+    return errorState;
 }
