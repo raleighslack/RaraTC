@@ -56,9 +56,10 @@ bool get_bit(uint8_t value, uint8_t index) {
 
 static void lipo_task(void* arg) {
     while(1) {
-        float voltage = get_lipo_voltage();
-        ESP_LOGI(TAG, "VOLTAGE: %f", voltage);
-        vTaskDelay(10000 / portTICK_PERIOD_MS);
+        // float voltage = get_lipo_voltage();
+        // ESP_LOGI(TAG, "VOLTAGE: %f", voltage);
+        
+        vTaskDelay(41 / portTICK_PERIOD_MS);
     }
 }
 
@@ -118,7 +119,7 @@ static void rtc_task(void* arg) {
                     current_simple_frame.second -= (60 - (current_simple_frame.second % 60));
                 }
 
-                ESP_LOGI(TAG, "DAY: %d, TC ISR: %d:%d:%d:%d, TIME SINCE 10secs: %d", days, current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame, timeSinceTenSecs);
+                // ESP_LOGI(TAG, "DAY: %d, TC ISR: %d:%d:%d:%d, TIME SINCE 10secs: %d", days, current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame, timeSinceTenSecs);
 
                 ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
             } else {
@@ -159,9 +160,19 @@ void IRAM_ATTR periodic_timecode_callback(void* arg)
         current_simple_frame.frame++;
         if(current_simple_frame.frame >= LTC_FRAMERATE) {
             current_simple_frame.frame = 0;
+            current_simple_frame.second++;
+            if(current_simple_frame.second >= 60) {
+                current_simple_frame.second = 0;
+                current_simple_frame.minute++;
+                if(current_simple_frame.minute >= 60) {
+                    current_simple_frame.minute = 0;
+                    current_simple_frame.hour++;
+                }
+            }
         }
         create_frame_from_timecode(&current_frame, current_simple_frame.frame, current_simple_frame.second, current_simple_frame.minute, current_simple_frame.hour);
         create_bits_from_frame(current_bits, current_frame);
+        ESP_LOGI(TAG, "TC: %d:%d:%d:%d", current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame);
     }
 }
 
