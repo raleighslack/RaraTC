@@ -43,10 +43,13 @@ static int device_read(uint16_t con_handle, uint16_t attr_handle, struct ble_gat
 
 static int lipo_ble_read(uint16_t con_handle, uint16_t attr_handle, struct ble_gatt_access_ctxt *ctxt, void *arg)
 {
-    float voltage = get_lipo_voltage();
-    char float_bytes[sizeof(voltage)];
-    memcpy(float_bytes, &voltage, sizeof(voltage));
-    os_mbuf_append(ctxt->om, float_bytes, sizeof(voltage));
+    // float voltage = get_lipo_voltage();
+    // char float_bytes[sizeof(voltage)];
+    // memcpy(float_bytes, &voltage, sizeof(voltage));
+    // os_mbuf_append(ctxt->om, float_bytes, sizeof(voltage));
+    // return 0;
+    int percent = get_lipo_percent();
+    os_mbuf_append(ctxt->om, &percent, sizeof(percent));
     return 0;
 }
 

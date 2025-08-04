@@ -21,3 +21,10 @@ float get_lipo_voltage() {
     float voltage = (voltage_divided/1000.0)*2.0;
     return voltage;
 }
+
+int get_lipo_percent() {
+    float voltage = get_lipo_voltage();
+    int percent = (((voltage - 3.3) *100) / (4.2-3.3));
+    ESP_LOGI(TAG, "PERCENT: %d", percent);
+    return percent;
+}

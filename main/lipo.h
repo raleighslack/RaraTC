@@ -8,3 +8,4 @@
 
 float get_lipo_voltage();
 esp_err_t init_lipo();
+int get_lipo_percent();
