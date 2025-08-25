@@ -17,7 +17,7 @@ The custom RSYNC board created by Raleigh Slack.
 
 ### Tools Used
 
-[Altium Designer](https://www.altium.com/altium-designer) - Main PCB design software
+[Altium Designer](https://www.altium.com/altium-designer) - Main PCB design software  
 [EasyEDA](https://easyeda.com/) - Can generate footprints and symbols for Altium
 
 ### Build and Flash
