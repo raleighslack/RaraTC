@@ -24,7 +24,7 @@ uint8_t reverse_bits(uint8_t n) {
     return n;
 }
 
-void create_bits_from_frame(uint8_t bits[10], ltc_frame frame) {
+void create_bits_from_frame(uint8_t bits[10], ltc_frame frame, int framerate) {
     two_digits temp_digits_frame;
     convert_digits_to_single(&temp_digits_frame, frame.frame);
 
@@ -71,4 +71,43 @@ void create_bits_from_frame(uint8_t bits[10], ltc_frame frame) {
     if((num_zeros % 2) == 1) {
         bits[27/8] |= (1<<(27%8));
     }
+}
+
+uint8_t get_bit_from_all(uint8_t bits[10], int index) {
+    int byte_index = index / 8;
+    int bit_index = index % 8;
+    return (bits[byte_index] >> bit_index) & 1;
+}
+
+// Helper to decode BCD from arbitrary bit positions
+int bcd_decode(uint8_t bits[10], int bit_indices[], int count) {
+    int value = 0;
+    for (int i = 0; i < count; i++) {
+        value |= get_bit_from_all(bits, bit_indices[i]) << i;
+    }
+    return value;
+}
+
+void log_frame_from_bits(uint8_t bits[10]) {
+    uint8_t reversed_bits[10];
+    for (int i = 0; i < 10; i++) {
+        reversed_bits[i] = reverse_bits(bits[i]);
+    }
+
+    // Use reversed_bits instead of bits
+    int frame_units = bcd_decode(reversed_bits, (int[]){0, 1, 2, 3}, 4);
+    int frame_tens  = bcd_decode(reversed_bits, (int[]){8, 9}, 2);
+    int sec_units   = bcd_decode(reversed_bits, (int[]){16, 17, 18, 19}, 4);
+    int sec_tens    = bcd_decode(reversed_bits, (int[]){24, 25, 26}, 3);
+    int min_units   = bcd_decode(reversed_bits, (int[]){32, 33, 34, 35}, 4);
+    int min_tens    = bcd_decode(reversed_bits, (int[]){40, 41, 42}, 3);
+    int hour_units  = bcd_decode(reversed_bits, (int[]){48, 49, 50, 51}, 4);
+    int hour_tens   = bcd_decode(reversed_bits, (int[]){56, 57}, 2);
+
+    int frames  = frame_tens * 10 + frame_units;
+    int seconds = sec_tens * 10 + sec_units;
+    int minutes = min_tens * 10 + min_units;
+    int hours   = hour_tens * 10 + hour_units;
+
+    ESP_LOGI("TC", "Decoded Timecode: %02d:%02d:%02d:%02d", hours, minutes, seconds, frames);
 }

@@ -35,7 +35,7 @@ static QueueHandle_t rtc_evt_queue;
 static QueueHandle_t btn_evt_queue;
 
 const float period_us = (((float)1/LTC_FRAMERATE)/LTC_BITS_PER_FRAME)*1000000;
-const int64_t half_period_us = period_us/2;
+const int64_t half_period_us = period_us/2.0;
 const float frame_period_us = ((float)1/LTC_FRAMERATE) * 1000000;
 
 volatile int frameOffset = 0;
@@ -59,7 +59,7 @@ static void lipo_task(void* arg) {
         // float voltage = get_lipo_voltage();
         // ESP_LOGI(TAG, "VOLTAGE: %f", voltage);
         
-        vTaskDelay(41 / portTICK_PERIOD_MS);
+        vTaskDelay(10000 / portTICK_PERIOD_MS);
     }
 }
 
@@ -97,8 +97,6 @@ static void rtc_task(void* arg) {
                 uint8_t seconds = get_rtc_seconds();
                 uint8_t days = get_rtc_date();
 
-                int timeSinceTenSecs = ((hours * 60 * 60) + (minutes * 60) + seconds) - 10;
-
                 int delayTime = (timeOffsetMs - ((cpu_hal_get_cycle_count() - start)/CLOCK_TICKS_PER_SEC) * 1000) / portTICK_PERIOD_MS;
                 if(delayTime <0) {
                     delayTime=0;
@@ -119,11 +117,9 @@ static void rtc_task(void* arg) {
                     current_simple_frame.second -= (60 - (current_simple_frame.second % 60));
                 }
 
-                // ESP_LOGI(TAG, "DAY: %d, TC ISR: %d:%d:%d:%d, TIME SINCE 10secs: %d", days, current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame, timeSinceTenSecs);
-
+                // ESP_LOGI(TAG, "DAY: %d, TC ISR: %d:%d:%d:%d", days, current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame);
+        
                 ESP_ERROR_CHECK(esp_timer_start_periodic(periodic_timecode, half_period_us));
-            } else {
-                ESP_LOGI(TAG, "BTN ISR");
             }
         }
     }
@@ -138,6 +134,16 @@ static void rtc_isr_handler(void* arg)
 static void btn_isr_handler(void* arg) {
     int gpio_num = (int) arg;
     xQueueSendFromISR(btn_evt_queue, &gpio_num, NULL);
+}
+
+void print_binary(uint8_t bits[10]) {
+    for (int i = 0; i < 10; i++) {
+        for (int j = 7; j >= 0; j--) {
+            printf("%d", (bits[i] >> j) & 1);
+        }
+        printf(" ");
+    }
+    printf("\n");
 }
 
 void IRAM_ATTR periodic_timecode_callback(void* arg)
@@ -171,19 +177,11 @@ void IRAM_ATTR periodic_timecode_callback(void* arg)
             }
         }
         create_frame_from_timecode(&current_frame, current_simple_frame.frame, current_simple_frame.second, current_simple_frame.minute, current_simple_frame.hour);
-        create_bits_from_frame(current_bits, current_frame);
-        ESP_LOGI(TAG, "TC: %d:%d:%d:%d", current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame);
+        create_bits_from_frame(current_bits, current_frame, LTC_FRAMERATE);
+        // ESP_LOGI(TAG, "TC: %d:%d:%d:%d", current_simple_frame.hour, current_simple_frame.minute, current_simple_frame.second, current_simple_frame.frame);
+        // log_frame_from_bits(current_bits);
+        // print_binary(current_bits);
     }
-}
-
-void print_binary(uint8_t bits[10]) {
-    for (int i = 0; i < 10; i++) {
-        for (int j = 7; j >= 0; j--) {
-            printf("%d", (bits[i] >> j) & 1);
-        }
-        printf(" ");
-    }
-    printf("\n");
 }
 
 void encode_base58(uint64_t value, char *output, size_t output_size) {
@@ -210,7 +208,7 @@ void app_main(void)
     io_conf.intr_type = GPIO_INTR_DISABLE;
     io_conf.mode = GPIO_MODE_OUTPUT;
     io_conf.pin_bit_mask = GPIO_OUTPUT_PIN_SEL;
-    gpio_config(&io_conf);
+    // gpio_config(&io_conf);
 
     io_conf.intr_type = GPIO_INTR_POSEDGE;
     io_conf.mode = GPIO_MODE_INPUT;
@@ -235,11 +233,11 @@ void app_main(void)
         /* name is optional, but may help identify the timer when debugging */
         .name = "periodic_timecode"
     };
-    ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
+    // ESP_ERROR_CHECK(esp_timer_create(&periodic_timecode_args, &periodic_timecode));
 
     ESP_ERROR_CHECK(gpio_install_isr_service(ESP_INTR_FLAG_LEVEL1));
     ESP_ERROR_CHECK(esp_deep_sleep_enable_gpio_wakeup(BIT(BTN_INPUT_PIN), ESP_GPIO_WAKEUP_GPIO_HIGH));
-    ESP_ERROR_CHECK(gpio_isr_handler_add(RTC_INPUT_PIN, rtc_isr_handler, (void*) RTC_INPUT_PIN));
+    // ESP_ERROR_CHECK(gpio_isr_handler_add(RTC_INPUT_PIN, rtc_isr_handler, (void*) RTC_INPUT_PIN));
     ESP_ERROR_CHECK(gpio_isr_handler_add(BTN_INPUT_PIN, btn_isr_handler, (void*) BTN_INPUT_PIN));
 
     rtc_evt_queue = xQueueCreate(10, sizeof(int));
@@ -262,4 +260,14 @@ void app_main(void)
     char bt_name[32];
     snprintf(bt_name, sizeof(bt_name), "RSYNC - %s", serial_base58);
     bluetooth_main(bt_name);
+
+    uint8_t testbits[10];
+    ltc_frame testframe;
+    testframe.drop_frame_flag = false;
+    testframe.frame = 16;
+    testframe.second = 23;
+    testframe.minute = 33;
+    testframe.hour = 9;
+    create_bits_from_frame(testbits, testframe, 24);
+    print_binary(testbits);
 }

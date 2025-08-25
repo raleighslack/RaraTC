@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include "esp_mac.h"
+#include "esp_log.h"
+#include "string.h"
 #include <stdio.h>
 
 #ifdef __cplusplus
@@ -40,7 +42,9 @@ void convert_digits_to_single(two_digits* digits, uint8_t value);
 
 void create_frame_from_timecode(ltc_frame* frame, uint8_t frames, uint8_t seconds, uint8_t minutes, uint8_t hours);
 
-void create_bits_from_frame(uint8_t bits[10], ltc_frame frame);
+void create_bits_from_frame(uint8_t bits[10], ltc_frame frame, int framerate);
+
+void log_frame_from_bits(uint8_t bits[10]);
 
 #ifdef __cplusplus
 }
